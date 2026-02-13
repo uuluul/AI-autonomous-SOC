@@ -256,7 +256,7 @@ You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. N
 
 This project is licensed under the MIT License.
 
-### Special Thanks & Attribution
+### Framework Integration & Attributions
 
 This project incorporates data and concepts from the following open-source frameworks:
 
