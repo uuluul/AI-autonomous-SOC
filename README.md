@@ -6,6 +6,12 @@
 
 Powered by **OpenAI (GPT-4)** and **OpenSearch**, it uses a **Dual-Index RAG** strategy to correlate real-time attacks with both external expert knowledge (MITRE/AIDEFEND) and internal historical incidents.
 
+<div align="center">
+  <img src="images/AI-SOC.png" alt="AI-Powered SOC Architecture with Triple Input Strategy" width="800">
+  <br>
+  <em>Figure: The complete GenAI-Native data pipeline featuring RSS, System Logs, and Manual Uploads, processed through a Privacy-First AI engine.</em>
+</div>
+
 ![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Stream%20%2B%20RAG-blueviolet)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-Compose-orange.svg)
