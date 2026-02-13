@@ -215,9 +215,9 @@ doc = {
 
 try:
     client.index(index='security-logs-knn', body=doc, refresh=True)
-    print('✅ Attack Simulated! Check the Dashboard.')
+    print('  Attack Simulated! Check the Dashboard.')
 except Exception as e:
-    print(f'❌ Error: {e}')
+    print(f'  Error: {e}')
 "
 ```
 
