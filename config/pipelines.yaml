@@ -1,0 +1,14 @@
+log-pipeline:
+  source:
+    http:
+      ssl: false  # 測試環境關閉 SSL 來簡化設定
+  processor:
+    - string_converter:
+        upper_case: false
+  sink:
+    - opensearch:
+        hosts: ["https://opensearch-node:9200"]
+        insecure: true # 忽略 SSL 憑證檢查
+        username: "admin"
+        password: "admin"
+        index: "fluent-bit-logs"

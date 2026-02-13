@@ -1,0 +1,34 @@
+# --- System & Environment ---
+.env
+.venv/
+venv/
+__pycache__/
+.DS_Store
+.idea/
+.vscode/
+*.pyc
+
+# --- Data Directories (Keep folders, ignore content) ---
+data/input/*
+!data/input/.gitkeep
+!data/input/sample_cti.txt
+
+# 忽略處理過的歸檔
+data/processed/*
+!data/processed/.gitkeep
+
+# 忽略產生的報告
+data/reports/*
+!data/reports/.gitkeep
+
+# 忽略地端資料庫
+data/cti_tasks.db
+data/*.mmdb
+
+# --- Outputs ---
+out/*
+!out/.gitkeep
+
+# --- Logs ---
+logs/*
+!logs/.gitkeep

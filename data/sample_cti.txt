@@ -1,0 +1,5 @@
+Researchers observed a phishing campaign delivering a PowerShell-based loader.
+The attacker used domain example-malicious.com and IP 203.0.113.10.
+The payload downloads from https://example-malicious.com/a.ps1.
+SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Techniques include PowerShell execution and command and scripting interpreter.

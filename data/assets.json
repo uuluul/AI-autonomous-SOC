@@ -1,0 +1,6 @@
+{
+    "192.168.1.10": {"owner": "HR Dept", "criticality": "Low", "hostname": "HR-Printer"},
+    "192.168.1.50": {"owner": "IT Dept", "criticality": "Critical", "hostname": "AD-Controller-01"},
+    "192.168.1.100": {"owner": "Finance", "criticality": "High", "hostname": "Finance-DB-Server"},
+    "10.0.0.1": {"owner": "Network Team", "criticality": "Critical", "hostname": "Core-Switch"}
+}
