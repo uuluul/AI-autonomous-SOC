@@ -2,6 +2,14 @@
 
 > **Next-Gen Cyber Threat Intelligence Platform with Hybrid Data Ingestion & Dual-Layer RAG**
 
+![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Stream%20%2B%20RAG-blueviolet)
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Compose-orange.svg)
+![Component](https://img.shields.io/badge/Queue-RabbitMQ-red.svg)
+![Component](https://img.shields.io/badge/Ingest-Fluent%20Bit-green.svg)
+
+---
+
 **NeoVigil** is a production-ready Security Operations Center (SOC) pipeline that automates the lifecycle of threat detection. It uniquely combines **streaming log analysis** (via Fluent Bit) and **static intelligence processing** (via Automated Crawlers) into a unified, AI-driven engine.
 
 Powered by **OpenAI (GPT-4)** and **OpenSearch**, it uses a **Dual-Index RAG** strategy to correlate real-time attacks with both external expert knowledge (MITRE/AIDEFEND) and internal historical incidents.
@@ -11,12 +19,6 @@ Powered by **OpenAI (GPT-4)** and **OpenSearch**, it uses a **Dual-Index RAG** s
   <br>
   <em>Figure: AI-Powered SOC Architecture with Triple Input Strategy.</em>
 </div>
-
-![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Stream%20%2B%20RAG-blueviolet)
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Compose-orange.svg)
-![Component](https://img.shields.io/badge/Queue-RabbitMQ-red.svg)
-![Component](https://img.shields.io/badge/Ingest-Fluent%20Bit-green.svg)
 
 ---
 
