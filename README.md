@@ -9,7 +9,7 @@ Powered by **OpenAI (GPT-4)** and **OpenSearch**, it uses a **Dual-Index RAG** s
 <div align="center">
   <img src="./images/AI-SOC.png" alt="AI-Powered SOC Architecture with Triple Input Strategy" width="800">
   <br>
-  <em>Figure: The complete GenAI-Native data pipeline featuring RSS, System Logs, and Manual Uploads, processed through a Privacy-First AI engine.</em>
+  <em>Figure: AI-Powered SOC Architecture with Triple Input Strategy.</em>
 </div>
 
 ![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Stream%20%2B%20RAG-blueviolet)
