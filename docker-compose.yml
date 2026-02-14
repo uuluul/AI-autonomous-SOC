@@ -178,14 +178,16 @@ services:
       opensearch-node:
         condition: service_healthy
 
-  # RSS crawler
-  rss-crawler:
+  # Threat Intelligence Collector
+  intelligence-crawler:
     build: .
-    container_name: rss-crawler
-    command: python /app/src/rss_crawler.py
+    container_name: intelligence-crawler
+    command: python /app/src/intelligence_crawler.py
     volumes:
       - ./src:/app/src
       - ./data:/app/data
+    env_file:
+      - .env
     networks:
       - opensearch-net
     restart: unless-stopped

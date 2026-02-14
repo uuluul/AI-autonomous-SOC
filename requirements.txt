@@ -17,5 +17,6 @@ pydeck
 plotly
 geoip2
 pyyaml
-plotly
-schedule
+selenium 
+webdriver-manager
+OTXv2>=1.5.13

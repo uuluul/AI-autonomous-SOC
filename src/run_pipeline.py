@@ -61,7 +61,7 @@ def get_rabbitmq_connection():
             channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
             return connection, channel
         except pika.exceptions.AMQPConnectionError:
-            logger.warning("⏳ Waiting for RabbitMQ...")
+            logger.warning("  Waiting for RabbitMQ...")
             time.sleep(5)
 
 # --- RAG 檢索函式 ---
@@ -115,10 +115,10 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
             
             # 組裝知識庫 Context
             if attacks:
-                context_parts.append("📚 [Known Attack Patterns (MITRE ATT&CK)]:")
+                context_parts.append("  [Known Attack Patterns (MITRE ATT&CK)]:")
                 context_parts.extend(attacks)
             if defenses:
-                context_parts.append("🛡️ [Recommended Defenses (AI Defense)]:")
+                context_parts.append("  [Recommended Defenses (AI Defense)]:")
                 context_parts.extend(defenses)
                 
     except Exception as e:
@@ -158,7 +158,7 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
                 history.append(info)
             
             if history:
-                context_parts.append("\n🗄️ [Similar Past Internal Incidents]:")
+                context_parts.append("\n  [Similar Past Internal Incidents]:")
                 context_parts.extend(history)
 
     except Exception as e:
@@ -231,7 +231,7 @@ def update_knowledge_base_job():
             logger.error(f"  [CronJob] Update script failed:\n{result.stderr}")
             
     except Exception as e:
-        logger.error(f"💥 [CronJob] Execution error: {e}")
+        logger.error(f"  [CronJob] Execution error: {e}")
 
 def run_scheduler_thread():
     """背景排程執行緒"""
@@ -309,7 +309,7 @@ def process_task(task_payload: dict, llm: LLMClient):
     safe_content = masker.mask(raw_content) 
     
     if safe_content != raw_content:
-        logger.info("🛡️ PII Masking applied (Emails/Phones redacted).")
+        logger.info("  PII Masking applied (Emails/Phones redacted).")
 
     is_log = filename.startswith("LOG_")
     normalized_data = {} # 存放結構化資料
@@ -412,7 +412,7 @@ def process_task(task_payload: dict, llm: LLMClient):
         enricher.close()
         
     except Exception as e:
-        logger.error(f"⚠️ Enrichment failed: {e}")
+        logger.error(f"  Enrichment failed: {e}")
 
     # ================= 1.6 CVE 漏洞關聯 =================
     try:
@@ -451,15 +451,44 @@ def process_task(task_payload: dict, llm: LLMClient):
         f.write(stix_json_str)
 
     # ================= 智慧分流路由邏輯 ===================
+    is_log = filename.startswith("LOG_")               # 確保 is_log 定義清晰
     is_rss = filename.startswith("RSS_")
-    
+    is_otx = filename.startswith("OTX_CTI_")           # 辨識 OTX 來源
+    is_abusech = filename.startswith("ABUSECH_CTI_")   # 辨識 Abuse.ch 來源
+    is_github = filename.startswith("GITHUB_CTI_")     # 辨識 GitHub 來源
+    is_premium_feed = is_otx or is_abusech or is_github # 統稱為專業威脅情資
+
     confidence = extracted.get("confidence", 0)
     threat_matched = has_rag_context 
 
-    # 自動化通道 (Auto-Pilot)
-    if is_rss or (is_log and (confidence >= 80 or threat_matched)):
+    # 定義「有實質指標」的情報：包含 ipv4, domains, urls, cve_ids
+    has_indicators = bool(extracted.get("indicators", {}).get("ipv4") or 
+                          extracted.get("indicators", {}).get("domains") or 
+                          extracted.get("indicators", {}).get("urls") or 
+                          extracted.get("cve_ids"))
+
+    # 定義自動通關條件 (Auto-Pilot Condition)
+    auto_pilot_condition = (
+        is_rss or 
+        (is_log and (confidence >= 80 or threat_matched)) or
+        (is_premium_feed and confidence >= 70 and has_indicators)
+    )
+
+    # 1. 自動化通道 (Auto-Pilot)
+    if auto_pilot_condition:
         
-        trigger_reason = "RSS Feed" if is_rss else f"High Confidence Log ({confidence}%)"
+        # 依據不同來源給予不同的觸發原因日誌
+        if is_rss:
+            trigger_reason = "RSS Feed"
+        elif is_otx:
+            trigger_reason = f"AlienVault OTX Pulse ({confidence}%)"
+        elif is_abusech:
+            trigger_reason = f"Abuse.ch Malware IoC ({confidence}%)"
+        elif is_github:
+            trigger_reason = f"GitHub Security Advisory ({confidence}%)"
+        else:
+            trigger_reason = f"High Confidence Log ({confidence}%)"
+            
         logger.info(f"  Automated Pipeline Triggered [{trigger_reason}]. Blocking & Reporting...")
 
         pdf_filename = f"{os.path.splitext(filename)[0]}.pdf"
@@ -475,19 +504,28 @@ def process_task(task_payload: dict, llm: LLMClient):
             upsert_indicator(domain, "domain", report_info)
 
         doc = extracted.copy()
+        
+        # 依據來源設定資料庫中的 source_type 標籤
+        if is_rss:
+            src_type = "rss"
+        elif is_premium_feed:
+            src_type = "premium_cti_feed"
+        else:
+            src_type = "log_automation"
+
         doc.update({
             "filename": filename,
             "timestamp": datetime.now().isoformat(),
             "expiration_date": (datetime.now() + timedelta(days=30)).isoformat(),
             "pdf_path": pdf_path,
-            "source_type": "rss" if is_rss else "log_automation",
+            "source_type": src_type,
             "threat_matched": threat_matched
         })
         
         report_id = os.path.splitext(filename)[0] 
         upload_to_os_lib(doc, report_id, "cti-reports")
 
-        # 同步寫入 SOC Dashboard
+        # 同步寫入 SOC Dashboard (只處理 is_log)
         if is_log:
             soc_doc = doc.copy()
             first_ip = indicators.get("ipv4", [None])[0]
@@ -497,19 +535,30 @@ def process_task(task_payload: dict, llm: LLMClient):
             soc_doc["threat_matched"] = True 
             soc_doc["attack_type"] = extracted.get("attack_type", "High Confidence Threat")
             soc_doc["severity"] = "Critical" if confidence >= 90 else "High"
-            soc_doc["mitigation_status"] = "Blocked 🛡️"
+            soc_doc["mitigation_status"] = "Blocked  "
             
             upload_to_os_lib(soc_doc, f"log_{report_id}", "security-logs-knn")
             logger.info(f"  Synced to SOC Dashboard (security-logs-knn)")
 
-    # 噪音過濾通道
-    elif is_log and confidence < 40:
-        logger.info(f"  Low confidence threat ({confidence}%). Archiving without review.")
+    # 2. 噪音過濾通道 (直接丟棄/不處理)
+    elif (is_log and confidence < 40) or (is_premium_feed and confidence < 50):
+        # 如果情報解析失敗或被 AI 判定為無用雜訊，則過濾掉
+        logger.info(f"  Low confidence data ({confidence}%). Archiving without review.")
 
-    # 人工審核通道
+    # 3. 人工審核通道 (Human-in-the-Loop)
     else:
-        source_type = "manual" if not is_log else "suspicious_log"
-        logger.info(f"🤔 Ambiguous Threat ({confidence}%). Sending to Human Review...")
+        # 邊緣案例，例如有情報但 AI 不太確定，丟給人工審核
+        if is_log:
+            source_type = "suspicious_log"
+            log_msg = f"🤔 Suspicious Log ({confidence}%). Sending to Human Review..."
+        elif is_premium_feed:
+            source_type = "unverified_cti_feed"
+            log_msg = f"🤔 Unverified Premium CTI ({confidence}%). Sending to Human Review..."
+        else:
+            source_type = "manual"
+            log_msg = f"🤔 Ambiguous Manual Upload ({confidence}%). Sending to Human Review..."
+            
+        logger.info(log_msg)
         
         insert_task(
             filename=filename,
@@ -518,7 +567,6 @@ def process_task(task_payload: dict, llm: LLMClient):
             analysis_json=extracted,
             confidence=confidence
         )
-
     # ================= 將分析結果存為 JSON 備份 =================
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
