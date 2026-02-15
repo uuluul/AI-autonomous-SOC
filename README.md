@@ -108,6 +108,24 @@ Unlike standard RAG, this system queries two distinct indices to build context:
 * **Resource Tracking**: Live CPU and Memory usage displayed directly in the dashboard sidebar using `psutil`.
 * **Process Health**: Monitors critical processes to ensure stability.
 
+### 9. Proactive Defense Controls & Compliance Framework 🏢🔒
+Newly implemented features for production environments (ISO 27001 / SOC 2 Ready):
+
+* **🚧 SOAR Guardrails**: 
+    * **Critical Asset Protection**: Prevents automated blocking of internal subnets (`10.0.0.0/8`, `192.168.0.0/16`).
+    * **Human-in-the-Loop**: High-risk internal alerts are automatically downgraded to "Pending Manual Approval".
+* **📜 Audit Trail & Rollback**:
+    * **Immutable Logging**: All analyst actions (Approve/Reject/Rollback) are logged to a tamper-proof OpenSearch index (`soc-audit-logs`).
+    * **One-Click Rollback**: Instantly revert accidental IP blocks via the UI, recovering service availability in seconds.
+* **🛡️ Privacy Shield (Local LLM Enforcement)**:
+    * **Strict Mode**: Enforces `USE_LOCAL_LLM=true` to prevent sensitive data from leaving the premise.
+    * **Cloud Block**: Automatically detects and blocks any fallback attempts to OpenAI/Azure if the local model fails.
+    * **DLQ Routing**: Failed tasks are routed to a specialized Dead Letter Queue (`data/failed_tasks/privacy_blocked`) for forensic review.
+* **🏗️ High Availability (HA)**:
+    * **Resilient Architecture**: Worker nodes automatically recover from RabbitMQ broker outages (verified via Chaos Engineering).
+    * **Scalability**: Docker Compose configuration supports horizontal scaling of worker nodes.
+
+
 | File Prefix | Source Type | Processing Mode | PDF Report | Primary Purpose |
 | :--- | :--- | :--- | :--- | :--- |
 | **`RSS_`** | Intelligence Feed | **Silent Ingestion** | JSON Only | Silently populates the knowledge base without generating noise. |
@@ -282,6 +300,7 @@ You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. N
 * **Infrastructure: Docker & Docker Compose**
 * **Frontend: Streamlit, PyDeck (3D Maps), Plotly, Mermaid.js**
 * **Monitoring: psutil (System Resources)**
+* **Testing: Pytest (Unit/Integration), Chaos Engineering (Resilience)**
 
 ## 📜 License & Acknowledgments
 

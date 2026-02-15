@@ -16,6 +16,10 @@ except ImportError:
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+class LocalLLMCriticalError(Exception):
+    """Raised when Local LLM fails or fallback to Cloud is attempted in Strict Mode."""
+    pass
+
 class LLMClient:
     def __init__(self) -> None:
         # 讀取 Provider 設定: openai, azure, 或 local
@@ -134,6 +138,12 @@ class LLMClient:
         if is_json and self.provider != "local":
             payload["response_format"] = {"type": "json_object"}
 
+        # PRIVACY ENFORCEMENT
+        if self.provider == "local":
+            if "api.openai.com" in url or "azure.com" in url:
+                raise LocalLLMCriticalError("❌ PRIVACY SHIELD: Blocked unauthorized attempt to contact Cloud API in Local Mode (Strict Data Governance).")
+
+
         try:
             with httpx.Client(timeout=self.timeout, verify=False) as client:
                 response = client.post(url, headers=headers, json=payload)
@@ -150,5 +160,9 @@ class LLMClient:
                         return {}
                 return content
         except Exception as e:
+            if self.provider == "local":
+                # Escalate to Critical Error for DLQ Routing
+                raise LocalLLMCriticalError(f"Local LLM Unreachable: {e}")
+            
             logger.error(f"  [{self.provider}] LLM Request Failed: {e} (URL: {url})")
             return {} if is_json else ""

@@ -6,7 +6,7 @@ import glob
 import pika
 import requests
 from datetime import datetime, timedelta
-from llm_client import LLMClient
+from llm_client import LLMClient, LocalLLMCriticalError
 from to_stix import build_stix_bundle
 from to_pdf import generate_pdf_report
 from extract_schema import DEFAULT_SYSTEM_PROMPT, EXTRACTION_SCHEMA_DESCRIPTION
@@ -20,6 +20,8 @@ from src.cve_enrichment import CVEEnricher
 import schedule
 import threading
 import subprocess
+import ipaddress
+from src.audit_logger import AuditLogger
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,6 +44,25 @@ OS_PASS = os.getenv("OPENSEARCH_PASSWORD", "admin")
 OS_AUTH = (OS_USER, OS_PASS)
 BASE_URL = f"http://{OS_HOST}:{OS_PORT}"
 INDEX_KB = "cti-reports"
+
+# Enterprise Guardrails: Critical Subnets
+CRITICAL_SUBNETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("127.0.0.0/8")
+]
+
+def is_critical_infrastructure(ip_str):
+    """Check if IP belongs to critical internal infrastructure"""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        for subnet in CRITICAL_SUBNETS:
+            if ip in subnet:
+                return True
+    except:
+        return False
+    return False
 
 def ensure_dirs():
     """確保必要的資料夾存在"""
@@ -303,7 +324,7 @@ def move_to_processed(file_path, filename):
         logger.error(f"  Error archiving file: {e}")
 
 
-def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine, cve_enricher: CVEEnricher):
+def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine, cve_enricher: CVEEnricher, audit_logger: AuditLogger):
     """
     Worker 邏輯：支援「檔案模式」與「串流模式」的通用處理器
     Payload 格式範例：
@@ -538,9 +559,32 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     # 2. Valid Threat Match (RAG)
     is_confirmed_high_risk = (confidence >= 80) or threat_matched
 
+    # === GUARDRAIL CHECK ===
+    force_human_review = False
+    indicators_list = extracted.get("indicators", {}).get("ipv4", [])
+    
+    if is_confirmed_high_risk:
+        for ip in indicators_list:
+            if is_critical_infrastructure(ip):
+                logger.warning(f"🛑 [GUARDRAIL] Target {ip} is CRITICAL INFRASTRUCTURE. Downgrading to MANUAL APPROVAL.")
+                
+                # Audit Log the intervention
+                audit_logger.log_event(
+                    actor="SOAR-Guardrail",
+                    action="DOWNGRADE_ACTION",
+                    target=filename, # Use the local variable 'filename'
+                    status="SUCCESS",
+                    justification=f"Prevented Auto-Block on Critical IP: {ip}",
+                    details={"original_confidence": confidence}
+                )
+                
+                is_confirmed_high_risk = False
+                force_human_review = True
+                break
+
     # 1. 純知識庫歸檔 (Crawlers OR Low Risk Manual/Logs)
     # If it's a crawler, or it's a Manual/Log entry that is NOT high risk, index only.
-    if is_crawler_content or not is_confirmed_high_risk:
+    if (is_crawler_content or not is_confirmed_high_risk) and not force_human_review:
         logger.info(f"  [Knowledge Base] Indexing content: {filename} (Confidence: {confidence}%, HighRisk: {is_confirmed_high_risk})")
         
         # 寫入 OpenSearch 的文件
@@ -567,7 +611,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         logger.info(f"  Indexed to Knowledge Base (cti-reports). No Report/Block generated.")
 
     # 2. 觸發警報與阻擋 (High Risk Manual or High Risk Logs)
-    elif is_confirmed_high_risk:
+    elif is_confirmed_high_risk and not force_human_review:
         
         # 建立企業白名單 (Optimization 2)
         WHITELIST_IPS = {"8.8.8.8", "1.1.1.1", "127.0.0.1"} 
@@ -598,6 +642,17 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             upsert_indicator(ip, "ipv4", report_info)
         for domain in indicators.get("domains", []):
             upsert_indicator(domain, "domain", report_info)
+
+        # AUDIT LOGGING: AI BLOCKING ACTION
+        audit_description = f"AI Auto-Blocked {len(indicators.get('ipv4', []))} IPs and {len(indicators.get('domains', []))} Domains. Confidence: {confidence}%"
+        audit_logger.log_event(
+            actor="AI-Agent",
+            action="BLOCK_THREAT",
+            target=filename,
+            status="SUCCESS",
+            justification=f"High Confidence Threat ({confidence}%) matched RAG/Rules.",
+            details={"indicators": indicators, "attack_type": extracted.get("attack_type", "Unknown")}
+        )
 
         # Indexing
         doc = extracted.copy()
@@ -631,7 +686,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             logger.info(f"  Synced to SOC Dashboard (security-logs-knn)")
 
     # 3. 噪音過濾 / 低信心 Log
-    elif is_log and confidence < 40:
+    elif is_log and confidence < 40 and not force_human_review:
         logger.info(f"  Low confidence Log ({confidence}%). Archiving.")
 
     # 3. 人工審核通道 (Human-in-the-Loop)
@@ -656,6 +711,26 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             analysis_json=extracted,
             confidence=confidence
         )
+        
+        # Optimization: Also index to security-logs-knn for Dashboard visibility (e.g. Guardrail Downgrades)
+        if force_human_review or confidence > 50:
+             # Create a record for dashboard visibility
+             soc_doc = extracted.copy()
+             soc_doc.update({
+                "filename": filename,
+                "timestamp": datetime.now().isoformat(),
+                "source_ip": indicators.get("ipv4", [None])[0] or "Unknown",
+                "log_text": safe_content,
+                "message": safe_content,
+                "threat_matched": True, # Keep it visible as threat
+                "attack_type": extracted.get("attack_type", "Suspicious Activity"),
+                "severity": "Medium",
+                "mitigation_status": "Pending Manual Approval ⏳"
+             })
+             # Use a distinct ID to avoid overwriting if approved later (though dashboard usually filters by ID)
+             report_id = os.path.splitext(filename)[0]
+             upload_to_os_lib(soc_doc, f"log_{report_id}", "security-logs-knn")
+             logger.info(f"  Synced to SOC Dashboard (security-logs-knn) as Pending.")
     # ================= 將分析結果存為 JSON 備份 =================
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -756,7 +831,7 @@ def run_master():
             time.sleep(10)
 
 # --- Worker: 從 Queue 領任務 ---
-def safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher):
+def safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher, audit_logger):
     """
     Wrapper to handle task processing with error handling and DLQ support.
     Expected to be used as a RabbitMQ callback.
@@ -766,11 +841,25 @@ def safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher)
         task_payload = json.loads(body)
         
         # 呼叫通用的處理函式
-        process_task(task_payload, llm, enricher, cve_enricher)
+        process_task(task_payload, llm, enricher, cve_enricher, audit_logger)
         
         # 任務成功，發送 ACK
         ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    except LocalLLMCriticalError as e:
+        logger.critical(f"🛑 [PRIVACY SHIELD ACTIVATED] Task blocked to prevent data leak! Error: {e}")
+        # Send to specific DLQ for Privacy Violations
+        failed_dir = "data/failed_tasks/privacy_blocked"
+        os.makedirs(failed_dir, exist_ok=True)
+        try:
+            with open(f"{failed_dir}/blocked_{int(time.time())}.json", "w") as f:
+                content = body.decode('utf-8') if isinstance(body, bytes) else str(body)
+                f.write(content)
+        except: pass
         
+        # Acknowledge to remove from queue (it's handled by DLQ)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
     except Exception as e:
         logger.error(f"  Worker task error: {e}")
         # 備份失敗的任務到本地端 (Optimization 4: DLQ)
@@ -792,6 +881,7 @@ def run_worker():
     llm = LLMClient()
     enricher = EnrichmentEngine()
     cve_enricher = CVEEnricher()
+    audit_logger = AuditLogger()
     
     while True:
         try:
@@ -806,14 +896,10 @@ def run_worker():
             logger.info("  Worker connected & listening on 'cti_queue'...")
 
             def callback(ch, method, properties, body):
-                safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher)
+                safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher, audit_logger)
 
             channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=callback)
             channel.start_consuming()
-
-        except Exception as e:
-            logger.error(f"  Worker error: {e}. Restarting in 5s...")
-            time.sleep(5)
 
         except Exception as e:
             logger.error(f"  Worker error: {e}. Restarting in 5s...")

@@ -8,6 +8,17 @@ __pycache__/
 .vscode/
 *.pyc
 
+# Test Artifacts
+*.log
+simulation.log
+test_*.sh
+chaos_*.sh
+src/test_*.py
+data/input/*.txt
+data/failed_tasks/
+data/processed/
+.env.bak
+
 # --- Data Directories (Keep folders, ignore content) ---
 data/input/*
 !data/input/.gitkeep
@@ -35,4 +46,4 @@ out/*
 
 # --- Logs ---
 logs/*
-!logs/.gitkeep
+!logs/.gitkeep.env.bak

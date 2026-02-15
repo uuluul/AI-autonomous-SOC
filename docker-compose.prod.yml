@@ -1,0 +1,247 @@
+version: '3.8'
+
+services:
+  # OpenSearch: Production Configuration
+  opensearch-node:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-node
+    environment:
+      - cluster.name=opensearch-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g" # Production Heap Size
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=admin
+      - DISABLE_SECURITY_PLUGIN=true 
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    networks:
+      - opensearch-net
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+  # OpenSearch Dashboards
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch-node:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    networks:
+      - opensearch-net
+    restart: always
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+
+  # RabbitMQ: Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    networks:
+      - opensearch-net
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Fluent Bit: Log Shipper
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: fluent-bit
+    volumes:
+      - ./config/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./config/parsers.conf:/fluent-bit/etc/parsers.conf
+      - ./logs:/var/log/apps
+    networks:
+      - opensearch-net
+    restart: always
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+
+  # SOAR Server (Mock)
+  soar-server:
+    build: .
+    container_name: soar-server
+    command: python /app/src/mock_soar.py
+    volumes:
+      - ./src:/app/src
+    ports:
+      - "5001:5000"
+    networks:
+      - opensearch-net
+    restart: always
+
+  # Log Generator (Optional in Prod, kept for simulation)
+  log-generator:
+    build: .
+    container_name: log-generator
+    command: python /app/src/simulate_file_logs.py
+    volumes:
+      - ./src:/app/src
+      - ./logs:/var/log/apps
+    networks:
+      - opensearch-net
+    depends_on:
+      - fluent-bit
+    restart: unless-stopped
+
+  # Setup Worker (One-off)
+  setup-worker:
+    build: .
+    container_name: setup-worker
+    command: >
+      sh -c "python /app/src/setup_soar_integration.py &&
+             python /app/src/setup_dashboards.py"
+    volumes:
+      - ./src:/app/src
+    networks:
+      - opensearch-net
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+
+  # CTI Pipeline Master
+  cti-pipeline-master:
+    build: .
+    container_name: cti-pipeline-master
+    volumes:
+      - ./data:/app/data
+      - ./out:/app/out
+      - ./src:/app/src
+      - ./.env:/app/.env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+      - ROLE=master
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["python", "-u", "/app/src/run_pipeline.py"] 
+    networks:
+      - opensearch-net
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1g
+
+  # CTI Pipeline Worker (Scalable)
+  cti-pipeline-worker:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./out:/app/out
+      - ./src:/app/src
+      - ./.env:/app/.env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - RABBITMQ_HOST=rabbitmq
+      - ROLE=worker
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["python", "/app/src/run_pipeline.py"]
+    networks:
+      - opensearch-net
+    restart: always
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+
+  # Threat Hunter
+  threat-hunter:
+    build: .
+    env_file: .env
+    container_name: threat-hunter
+    command: python -u /app/src/threat_hunting.py
+    volumes:
+      - ./src:/app/src
+      - ./out:/app/out
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_USER=admin
+      - OPENSEARCH_PASSWORD=admin
+    networks:
+      - opensearch-net
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+    restart: always
+
+  # Intelligence Crawler
+  intelligence-crawler:
+    build: .
+    container_name: intelligence-crawler
+    command: python /app/src/intelligence_crawler.py
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    env_file:
+      - .env
+    networks:
+      - opensearch-net
+    restart: always
+
+  # UI 
+  cti-ui:
+    build: .
+    container_name: cti-ui
+    command: streamlit run src/app_ui.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file: .env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+    networks:
+      - opensearch-net
+    depends_on:
+      opensearch-node:
+        condition: service_healthy
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+networks:
+  opensearch-net:
+    driver: bridge

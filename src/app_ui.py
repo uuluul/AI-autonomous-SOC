@@ -14,6 +14,13 @@ from database import get_pending_tasks, update_task_status
 from setup_opensearch import get_opensearch_client, upload_to_opensearch
 from to_pdf import generate_pdf_report
 from utils import get_ai_remediation
+from audit_logger import AuditLogger
+import requests
+
+audit_logger = AuditLogger()
+from audit_logger import AuditLogger
+
+audit_logger = AuditLogger()
 
 # 設定頁面
 st.set_page_config(page_title="CTI & SOC Platform", layout="wide", page_icon="🛡️")
@@ -127,6 +134,25 @@ def get_graph_data():
 
     return nodes, edges
 
+def get_audit_logs():
+    """Fetch recent audit logs from OpenSearch"""
+    client = get_opensearch_client()
+    query = {
+        "size": 1000,
+        "sort": [{"timestamp": {"order": "desc"}}],
+        "query": {"match_all": {}}
+    }
+    try:
+        if not client.indices.exists(index="soc-audit-logs"):
+            return pd.DataFrame()
+            
+        response = client.search(index="soc-audit-logs", body=query)
+        data = [hit["_source"] for hit in response["hits"]["hits"]]
+        return pd.DataFrame(data)
+    except Exception as e:
+        # st.error(f"Failed to fetch audit logs: {e}")
+        return pd.DataFrame()
+
 def get_real_soc_data():
     """從 OpenSearch 撈取 SOC 告警 (包含 GeoIP 豐富化資料)"""
     client = get_opensearch_client()
@@ -148,6 +174,7 @@ def get_real_soc_data():
             
             if ip_val != "Unknown":
                 data.append({
+                    "id": hit['_id'],
                     "timestamp": src.get('timestamp'),
                     "source_ip": ip_val,
                     "attack_type": src.get('attack_type', 'Threat Match'),
@@ -234,7 +261,7 @@ if st.sidebar.button("Logout"):
     st.session_state["password_correct"] = False
     st.rerun()
 
-page = st.sidebar.radio("Navigation", ["🚨 Internal Threat Monitor (SOC)", "📈 Enriched Alerts Dashboard", "🔍 CTI Report Review", "🕸️ Threat Graph", "📚 Knowledge Base"])
+page = st.sidebar.radio("Navigation", ["🚨 Internal Threat Monitor (SOC)", "📈 Enriched Alerts Dashboard", "🔍 CTI Report Review", "🕸️ Threat Graph", "📚 Knowledge Base", "📜 Audit & Compliance Trail"])
 
 ## --- 1. SOC Dashboard ---
 if page == "🚨 Internal Threat Monitor (SOC)":
@@ -452,6 +479,43 @@ if page == "🚨 Internal Threat Monitor (SOC)":
                 evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
                 unique_threats[attack_type]["evidence"].add(evidence_str)
 
+        # === ROLLBACK / UNBLOCK SECTION ===
+        st.subheader("🛡️ Active Defense Actions (SOAR)")
+        active_blocks = df[df['Mitigation'].str.contains('Blocked', na=False)]
+        if not active_blocks.empty:
+            for idx, row in active_blocks.iterrows():
+                with st.expander(f"🔴 Blocked: {row['source_ip']} ({row['attack_type']})"):
+                    c1, c2 = st.columns([3, 1])
+                    c1.write(f"**Justification**: {row.get('summary', 'Threat Matched')}")
+                    if c2.button("⏪ Rollback / Unblock", key=f"rb_{row['id']}"):
+                        try:
+                            # 1. Call Mock SOAR
+                            requests.post("http://soar-server:5000/unblock", json={"ip": row['source_ip']})
+                            
+                            # 2. Audit Log
+                            audit_logger.log_event(
+                                actor=st.session_state.get("logged_in_user", "Admin"),
+                                action="ROLLBACK_BLOCK",
+                                target=row['source_ip'],
+                                status="SUCCESS",
+                                justification="Manual Rollback requested by Analyst"
+                            )
+                            
+                            # 3. Update OpenSearch
+                            client = get_opensearch_client()
+                            client.update(
+                                index="security-logs-knn", 
+                                id=row['id'], 
+                                body={"doc": {"mitigation_status": "Rolled Back ⏪"}},
+                                refresh=True # Ensure immediate visibility
+                            )
+                            st.success(f"Successfully Unblocked {row['source_ip']}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Rollback failed: {e}")
+        else:
+            st.caption("No active blocks to rollback.")
+
         if unique_threats:
             # 2. Full-Width Stacked Layout (No Columns)
             st.markdown("#### � Defense Playbooks (AI Generated)")
@@ -582,6 +646,16 @@ elif page == "🔍 CTI Report Review":
             report_id = os.path.splitext(task['filename'])[0]
             upload_to_opensearch(doc, report_id, "cti-reports")
             
+            # AUDIT LOG: APPROVE
+            audit_logger.log_event(
+                actor=st.session_state.get("logged_in_user", "Admin"),
+                action="APPROVE_REPORT",
+                target=task['filename'],
+                status="SUCCESS",
+                justification="Manual Approval by Analyst",
+                details={"confidence": final_json.get("confidence")}
+            )
+            
             st.success(f"Approved! PDF generated at: {pdf_path}")
             st.rerun()
 
@@ -605,6 +679,16 @@ elif page == "🔍 CTI Report Review":
                 except Exception as e:
                     st.error(f"Failed to save feedback: {e}")
             
+            # AUDIT LOG: REJECT
+            audit_logger.log_event(
+                actor=st.session_state.get("logged_in_user", "Admin"),
+                action="REJECT_REPORT",
+                target=task['filename'],
+                status="SUCCESS",
+                justification=rejection_reason or "No reason provided",
+                details={"original_confidence": task.get("confidence")}
+            )
+
             st.rerun()
 
 # --- Threat Graph ---
@@ -723,3 +807,29 @@ elif page == "📚 Knowledge Base":
                         for rf in related: st.markdown(f"- 📄 `{rf}`")
                     else:
                         st.caption("No linked reports.")
+
+# --- Audit Trail ---
+elif page == "📜 Audit & Compliance Trail":
+    st.title("📜 Audit & Compliance Trail (ISO 27001)")
+    st.info("Immutable record of all AI and Analyst actions.")
+    
+    df_audit = get_audit_logs()
+    
+    if df_audit.empty:
+        st.warning("No audit logs found.")
+    else:
+        # Filters
+        c1, c2, c3 = st.columns(3)
+        with c1: filter_actor = st.multiselect("Actor", df_audit['actor'].unique())
+        with c2: filter_action = st.multiselect("Action", df_audit['action'].unique())
+        with c3: filter_status = st.multiselect("Status", df_audit['status'].unique())
+        
+        if filter_actor: df_audit = df_audit[df_audit['actor'].isin(filter_actor)]
+        if filter_action: df_audit = df_audit[df_audit['action'].isin(filter_action)]
+        if filter_status: df_audit = df_audit[df_audit['status'].isin(filter_status)]
+        
+        st.dataframe(
+            df_audit[['timestamp', 'actor', 'action', 'target', 'status', 'justification', 'event_id']], 
+            use_container_width=True,
+            hide_index=True
+        )

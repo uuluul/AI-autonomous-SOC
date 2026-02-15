@@ -73,6 +73,19 @@ class SimpleHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Ingested")
+                self.wfile.write(b"Ingested")
+                return
+
+            if self.path == '/unblock':
+                data = json.loads(post_data)
+                print("\n\n" + "="*50, flush=True)
+                print("  [SOAR SYSTEM] RECEIVED ROLLBACK REQUEST!  ", flush=True)
+                print(f"  Target IP: {data.get('ip', 'Unknown')}", flush=True)
+                print("  Action: Removing Firewall Rules & Unblocking Credential...", flush=True)
+                print("="*50 + "\n", flush=True)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"Unblocked")
                 return
 
             # Default: Alert Webhook (from Master/Worker)
