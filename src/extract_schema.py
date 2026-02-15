@@ -4,6 +4,7 @@ EXTRACTION_SCHEMA_DESCRIPTION = """
 Return a JSON object with these keys:
 
 - summary: string, short summary of the CTI report (If social media, summarize the core threat)
+- attack_type: string (Specific attack classification, e.g., "SQL Injection", "DDoS", "Ransomware", "Phishing")
 - indicators: object with arrays:
     - ipv4: string[]
     - ipv6: string[]
@@ -28,6 +29,8 @@ Return a JSON object with these keys:
     - log_type: string
     - fields: string[]
     - rationale: string
+
+- remediation: string (Actionable steps to mitigate the threat, even if generic)
 
 Rules:
 - Only output valid JSON (no markdown).

@@ -53,6 +53,8 @@ def load_sigma_rules_from_stix(filepath):
         bundle = json.load(f)
     sigma_rules = []
     for obj in bundle.get("objects", []):
+        if obj.get("type") == "indicator":
+            print(f"    Found indicator: {obj.get('name')} | Type: {obj.get('pattern_type')}")
         if obj.get("type") == "indicator" and obj.get("pattern_type") == "sigma":
             try:
                 rule_content = yaml.safe_load(obj.get("pattern", ""))

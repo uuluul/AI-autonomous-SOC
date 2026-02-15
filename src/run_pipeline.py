@@ -75,12 +75,12 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
     client = get_opensearch_client()
     context_parts = []
     
-    # 搜尋內容截斷，避免 Token 過長，但保留足夠語意
+    # 搜尋內容截斷，避免 Token 過長
     search_query = text_content[:1000]
 
     # =========================================================
     # 查詢 cti-knowledge-base (外部知識)
-    # 目的：找出這段文字涉及什麼「攻擊手法」或「防禦建議」
+    # 目的：找出這段文字涉及什麼攻擊手法或防禦建議
     # =========================================================
     try:
         kb_response = client.search(
@@ -126,7 +126,7 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
 
     # =========================================================
     # 查詢 cti-reports (內部歷史)
-    # 目的：找出「以前遇過這件事嗎？」
+    # 目的：找出以前遇過這件事嗎？
     # =========================================================
     try:
         report_response = client.search(
@@ -165,6 +165,42 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
         logger.warning(f"  Historical Report search failed: {e}")
 
     # =========================================================
+    # 查詢 ai-feedback (人類反饋閉環)
+    # 目的：找出 AI 曾經的誤判，避免重蹈覆轍
+    # =========================================================
+    try:
+        feedback_response = client.search(
+            index="ai-feedback",
+            body={
+                "size": top_k,
+                "query": {
+                    "more_like_this": {
+                        "fields": ["content", "reason"],
+                        "like": search_query,
+                        "min_term_freq": 1,
+                        "max_query_terms": 12
+                    }
+                }
+            }
+        )
+        
+        hits = feedback_response.get("hits", {}).get("hits", [])
+        if hits:
+            mistakes = []
+            for hit in hits:
+                src = hit["_source"]
+                # 格式：[REJECTED] 原因: 原文片段
+                info = f"- [REJECTED MISTAKE] Reason: {src.get('reason', 'No reason')} | Original Text: {src.get('content', '')[:150]}..."
+                mistakes.append(info)
+            
+            if mistakes:
+                context_parts.append("\n  [  Human Feedback / Past Mistakes - DO NOT REPEAT THESE ERRORS]:")
+                context_parts.extend(mistakes)
+
+    except Exception as e:
+        logger.warning(f"  AI Feedback search failed: {e}")
+
+    # =========================================================
     # 回傳最終組合文字
     # =========================================================
     if not context_parts:
@@ -173,7 +209,7 @@ def retrieve_context(text_content: str, top_k: int = 3) -> str:
     return "\n".join(context_parts)
 
 
-# ================= 🧹 自動清理舊檔案邏輯 =================
+# ================= 自動清理舊檔案邏輯 =================
 def cleanup_old_files():
     """
     定期任務：刪除 processed 資料夾中超過 RETENTION_DAYS 的舊檔案
@@ -267,7 +303,7 @@ def move_to_processed(file_path, filename):
         logger.error(f"  Error archiving file: {e}")
 
 
-def process_task(task_payload: dict, llm: LLMClient):
+def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine, cve_enricher: CVEEnricher):
     """
     Worker 邏輯：支援「檔案模式」與「串流模式」的通用處理器
     Payload 格式範例：
@@ -321,6 +357,12 @@ def process_task(task_payload: dict, llm: LLMClient):
             normalized_data = json.loads(safe_content)
             logger.info(f"  {filename} is valid JSON. Using natively.")
         except json.JSONDecodeError:
+            # 加入輕量級快篩 (Optimization 3)
+            suspicious_keywords = ["failed", "error", "drop", "deny", "alert", "attack", "unauthorized", "sql", "cve", "exploited"]
+            if not any(k in safe_content.lower() for k in suspicious_keywords):
+                logger.info(f"  [Triage] Log looks completely normal. Skipping AI to save cost.")
+                return # 直接略過正常 Log
+
             # 如果是 Raw Text，呼叫 AI 進行正規化
             logger.info(f"  {filename} is raw text. Starting AI Adaptive Normalization...")
             normalized_data = llm.normalize_log(safe_content)
@@ -399,7 +441,6 @@ def process_task(task_payload: dict, llm: LLMClient):
 
     # ================= 豐富化 (Enrichment) =================
     try:
-        enricher = EnrichmentEngine()
         enriched_data = {}
         indicators = extracted.get("indicators", {})
         
@@ -409,14 +450,12 @@ def process_task(task_payload: dict, llm: LLMClient):
                 enriched_data[ip] = info
         
         extracted["enrichment"] = enriched_data
-        enricher.close()
         
     except Exception as e:
         logger.error(f"  Enrichment failed: {e}")
 
     # ================= 1.6 CVE 漏洞關聯 =================
     try:
-        cve_enricher = CVEEnricher()
         vulnerability_results = []
 
         ai_cve_ids = extracted.get("cve_ids", [])
@@ -439,6 +478,24 @@ def process_task(task_payload: dict, llm: LLMClient):
                 extracted["confidence"] = 95
                 logger.warning("  Critical Vulnerability Detected! Confidence boosted to 95.")
 
+        # ================= Fallback: General AI Remediation =================
+        if not extracted["vulnerabilities"]:
+            # If no specific CVE, use the AI's general remediation advice
+            # Format: ID="", Severity=Severity, Description=Analysis, Remediation=Steps
+            
+            general_remediation = extracted.get("remediation", "Isolate affected host and block traffic.")
+            
+            extracted["vulnerabilities"].append({
+                "id": "", # Empty ID as requested
+                "cvss": 0.0,
+                "score": 0.0,
+                "severity": extracted.get("severity", "High"),
+                "description": f"AI Behavioral Analysis: {extracted.get('attack_type', 'Suspicious Activity')} detected.\n\nSummary: {extracted.get('summary', 'Traffic pattern matches known attack TTPs.')}",
+                "remediation": general_remediation,
+                "references": []
+            })
+            logger.info("  No specific CVE found. Added General AI Remediation analysis.")
+
     except Exception as e:
         logger.error(f"  CVE Enrichment Failed: {e}")
 
@@ -451,51 +508,90 @@ def process_task(task_payload: dict, llm: LLMClient):
         f.write(stix_json_str)
 
     # ================= 智慧分流路由邏輯 ===================
-    is_log = filename.startswith("LOG_")               # 確保 is_log 定義清晰
+    is_log = filename.startswith("LOG_")
     is_rss = filename.startswith("RSS_")
-    is_otx = filename.startswith("OTX_CTI_")           # 辨識 OTX 來源
-    is_abusech = filename.startswith("ABUSECH_CTI_")   # 辨識 Abuse.ch 來源
-    is_github = filename.startswith("GITHUB_CTI_")     # 辨識 GitHub 來源
-    is_premium_feed = is_otx or is_abusech or is_github # 統稱為專業威脅情資
+    is_otx = filename.startswith("OTX_CTI_")
+    is_abusech = filename.startswith("ABUSECH_CTI_")
+    is_github = filename.startswith("GITHUB_CTI_")
+    is_premium_feed = is_otx or is_abusech or is_github 
+    
+    # 判斷是否為手動上傳 (Manual_...)
+    is_manual = filename.startswith("Manual_")
 
     confidence = extracted.get("confidence", 0)
     threat_matched = has_rag_context 
 
-    # 定義「有實質指標」的情報：包含 ipv4, domains, urls, cve_ids
+    # 定義「有實質指標」的情報
     has_indicators = bool(extracted.get("indicators", {}).get("ipv4") or 
                           extracted.get("indicators", {}).get("domains") or 
                           extracted.get("indicators", {}).get("urls") or 
                           extracted.get("cve_ids"))
 
-    # 定義自動通關條件 (Auto-Pilot Condition)
-    auto_pilot_condition = (
-        is_rss or 
-        (is_log and (confidence >= 80 or threat_matched)) or
-        (is_premium_feed and confidence >= 70 and has_indicators)
-    )
+    # Logic Split:
+    # 1. Knowledge Base Only (Crawlers/Feeds) -> No PDF, No Blocking
+    # 2. Actionable Alerts (Manual, High Risk Logs) -> PDF + Blocking
 
-    # 1. 自動化通道 (Auto-Pilot)
-    if auto_pilot_condition:
+    is_crawler_content = is_rss or is_premium_feed
+
+    # High Risk Definition:
+    # 1. Very High Confidence (>= 80%) indicating malicious/virus
+    # 2. Valid Threat Match (RAG)
+    is_confirmed_high_risk = (confidence >= 80) or threat_matched
+
+    # 1. 純知識庫歸檔 (Crawlers OR Low Risk Manual/Logs)
+    # If it's a crawler, or it's a Manual/Log entry that is NOT high risk, index only.
+    if is_crawler_content or not is_confirmed_high_risk:
+        logger.info(f"  [Knowledge Base] Indexing content: {filename} (Confidence: {confidence}%, HighRisk: {is_confirmed_high_risk})")
         
-        # 依據不同來源給予不同的觸發原因日誌
-        if is_rss:
-            trigger_reason = "RSS Feed"
-        elif is_otx:
-            trigger_reason = f"AlienVault OTX Pulse ({confidence}%)"
-        elif is_abusech:
-            trigger_reason = f"Abuse.ch Malware IoC ({confidence}%)"
-        elif is_github:
-            trigger_reason = f"GitHub Security Advisory ({confidence}%)"
-        else:
-            trigger_reason = f"High Confidence Log ({confidence}%)"
-            
-        logger.info(f"  Automated Pipeline Triggered [{trigger_reason}]. Blocking & Reporting...")
+        # 寫入 OpenSearch 的文件
+        doc = extracted.copy()
+        
+        if is_rss: src_type = "rss"
+        elif is_premium_feed: src_type = "premium_cti_feed"
+        elif is_manual: src_type = "manual_low_risk"
+        elif is_log: src_type = "log_low_risk"
+        else: src_type = "external_feed"
 
+        doc.update({
+            "filename": filename,
+            "timestamp": datetime.now().isoformat(),
+            "expiration_date": (datetime.now() + timedelta(days=90)).isoformat(), # Crawled data kept longer for training
+            "pdf_path": None, # No PDF
+            "source_type": src_type,
+            "threat_matched": threat_matched
+        })
+        
+        report_id = os.path.splitext(filename)[0]
+        # Upload to cti-reports (Knowledge Base)
+        upload_to_os_lib(doc, report_id, "cti-reports")
+        logger.info(f"  Indexed to Knowledge Base (cti-reports). No Report/Block generated.")
+
+    # 2. 觸發警報與阻擋 (High Risk Manual or High Risk Logs)
+    elif is_confirmed_high_risk:
+        
+        # 建立企業白名單 (Optimization 2)
+        WHITELIST_IPS = {"8.8.8.8", "1.1.1.1", "127.0.0.1"} 
+        indicators = extracted.get("indicators", {})
+        
+        # Pre-check: Don't generate report if IP is whitelisted (only for logs)
+        if is_log:
+            should_skip = False
+            for ip in indicators.get("ipv4", []):
+                if ip in WHITELIST_IPS or ip.startswith("192.168.") or ip.startswith("10."):
+                    logger.info(f"    Log Source {ip} is whitelisted. Skipping Report Generation.")
+                    should_skip = True
+                    break
+            if should_skip:
+                return
+
+        trigger_reason = "Confirmed High Risk (Manual/Log)"
+        logger.info(f"    Actionable Alert Triggered [{trigger_reason} Confidence:{confidence}%]. Executing Response...")
+
+        # 生成 PDF
         pdf_filename = f"{os.path.splitext(filename)[0]}.pdf"
         pdf_path = os.path.join("data/reports", pdf_filename)
         generate_pdf_report(extracted, pdf_path)
         
-        indicators = extracted.get("indicators", {})
         report_info = {"filename": filename, "confidence": confidence}
         
         for ip in indicators.get("ipv4", []):
@@ -503,15 +599,9 @@ def process_task(task_payload: dict, llm: LLMClient):
         for domain in indicators.get("domains", []):
             upsert_indicator(domain, "domain", report_info)
 
+        # Indexing
         doc = extracted.copy()
-        
-        # 依據來源設定資料庫中的 source_type 標籤
-        if is_rss:
-            src_type = "rss"
-        elif is_premium_feed:
-            src_type = "premium_cti_feed"
-        else:
-            src_type = "log_automation"
+        src_type = "manual" if is_manual else "suspicious_log"
 
         doc.update({
             "filename": filename,
@@ -525,8 +615,8 @@ def process_task(task_payload: dict, llm: LLMClient):
         report_id = os.path.splitext(filename)[0] 
         upload_to_os_lib(doc, report_id, "cti-reports")
 
-        # 同步寫入 SOC Dashboard (只處理 is_log)
-        if is_log:
+        # 如果是 Log 或 Manual，同步到 SOC Dashboard (Map Needs Data)
+        if is_log or is_manual:
             soc_doc = doc.copy()
             first_ip = indicators.get("ipv4", [None])[0]
             soc_doc["source_ip"] = first_ip if first_ip else "Unknown"
@@ -540,10 +630,9 @@ def process_task(task_payload: dict, llm: LLMClient):
             upload_to_os_lib(soc_doc, f"log_{report_id}", "security-logs-knn")
             logger.info(f"  Synced to SOC Dashboard (security-logs-knn)")
 
-    # 2. 噪音過濾通道 (直接丟棄/不處理)
-    elif (is_log and confidence < 40) or (is_premium_feed and confidence < 50):
-        # 如果情報解析失敗或被 AI 判定為無用雜訊，則過濾掉
-        logger.info(f"  Low confidence data ({confidence}%). Archiving without review.")
+    # 3. 噪音過濾 / 低信心 Log
+    elif is_log and confidence < 40:
+        logger.info(f"  Low confidence Log ({confidence}%). Archiving.")
 
     # 3. 人工審核通道 (Human-in-the-Loop)
     else:
@@ -621,7 +710,7 @@ def run_master():
                     if filename.endswith(".processing"):
                         continue
 
-                    logger.info(f"📂 Found new file: {filename}")
+                    logger.info(f"  Found new file: {filename}")
                     
                     # 鎖定檔案 (改名)
                     processing_path = file_path + ".processing"
@@ -667,9 +756,42 @@ def run_master():
             time.sleep(10)
 
 # --- Worker: 從 Queue 領任務 ---
+def safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher):
+    """
+    Wrapper to handle task processing with error handling and DLQ support.
+    Expected to be used as a RabbitMQ callback.
+    """
+    try:
+        # 解析訊息 (可能是 Master 的檔案路徑，也可能是 Fluent Bit 的 JSON)
+        task_payload = json.loads(body)
+        
+        # 呼叫通用的處理函式
+        process_task(task_payload, llm, enricher, cve_enricher)
+        
+        # 任務成功，發送 ACK
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        
+    except Exception as e:
+        logger.error(f"  Worker task error: {e}")
+        # 備份失敗的任務到本地端 (Optimization 4: DLQ)
+        failed_dir = "data/failed_tasks"
+        os.makedirs(failed_dir, exist_ok=True)
+        try:
+            with open(f"{failed_dir}/failed_{int(time.time())}.json", "w") as f:
+                # body is bytes, decode it
+                content = body.decode('utf-8') if isinstance(body, bytes) else str(body)
+                f.write(content)
+        except Exception as write_err:
+             logger.error(f"  Failed to write to DLQ: {write_err}")
+
+        # 避免訊息卡死，選擇 ACK 並記錄錯誤
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
 def run_worker():
     logger.info("  CTI Worker Started. Waiting for tasks...")
     llm = LLMClient()
+    enricher = EnrichmentEngine()
+    cve_enricher = CVEEnricher()
     
     while True:
         try:
@@ -684,23 +806,14 @@ def run_worker():
             logger.info("  Worker connected & listening on 'cti_queue'...")
 
             def callback(ch, method, properties, body):
-                try:
-                    # 解析訊息 (可能是 Master 的檔案路徑，也可能是 Fluent Bit 的 JSON)
-                    task_payload = json.loads(body)
-                    
-                    # 呼叫通用的處理函式
-                    process_task(task_payload, llm)
-                    
-                    # 任務成功，發送 ACK
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                    
-                except Exception as e:
-                    logger.error(f"  Worker task error: {e}")
-                    # 避免毒藥訊息卡死，選擇 ACK 並記錄錯誤 (也可以不 ACK 直接重試)
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher)
 
             channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=callback)
             channel.start_consuming()
+
+        except Exception as e:
+            logger.error(f"  Worker error: {e}. Restarting in 5s...")
+            time.sleep(5)
 
         except Exception as e:
             logger.error(f"  Worker error: {e}. Restarting in 5s...")

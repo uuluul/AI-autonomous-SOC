@@ -21,6 +21,10 @@ data/processed/*
 data/reports/*
 !data/reports/.gitkeep
 
+# 忽略失敗的任務
+data/failed_tasks/*
+!data/failed_tasks/.gitkeep
+
 # 忽略地端資料庫
 data/cti_tasks.db
 data/*.mmdb

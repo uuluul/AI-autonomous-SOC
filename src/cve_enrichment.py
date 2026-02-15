@@ -2,6 +2,7 @@ import requests
 import re
 import logging
 import time
+from functools import lru_cache
 
 # 設定 Logging
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class CVEEnricher:
         params = {"keywordSearch": keyword, "resultsPerPage": 3}
         return self._make_request(params)
 
+    @lru_cache(maxsize=1024)
     def get_cve_details(self, cve_id):
         """Search NVD by CVE ID"""
         logger.info(f"  NVD ID Search: {cve_id}")

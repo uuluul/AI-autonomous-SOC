@@ -19,4 +19,4 @@ geoip2
 pyyaml
 selenium 
 webdriver-manager
-OTXv2>=1.5.13
+OTXv2>=1.5.12

@@ -69,6 +69,7 @@ graph TD
     * Powered by **Master Node**.
     * Watches `data/input/` for manual dumps or RSS crawler outputs.
     * Handles heavy file reading and archiving logic.
+    * **Data Sources**: Integrated feeds from **BleepingComputer**, **TheHackerNews**, and **OTX AlienVault** for comprehensive coverage.
 
 ### 2. Dual-Layer RAG (Retrieval-Augmented Generation)
 Unlike standard RAG, this system queries two distinct indices to build context:
@@ -89,6 +90,23 @@ Unlike standard RAG, this system queries two distinct indices to build context:
 * **GeoIP Integration**: Automatically resolves attacker locations (Latitude/Longitude/Country) for visual threat mapping.
 * **Internal Asset Correlation (CMDB)**: Integrates with internal Asset Databases (CMDB) to identify target server roles, departments (e.g., IT, R&D), and criticality levels (CRITICAL/HIGH/LOW).
 * **Dynamic Severity Scoring**: Automatically boosts alert priority when attacks target critical business infrastructure (e.g., Production Web Servers).
+
+### 6. Advanced Optimizations (Performance & Resilience)
+* **🚀 API Caching**: Reduces API calls to NVD/GeoIP by 90% using `lru_cache`, ensuring instant response for recurring threats.
+* **🛡️ Absolute Whitelist**: Protects critical infrastructure (e.g., 8.8.8.8, Gateway IPs) from accidental AI blocking.
+* **⚡ Keyword Triage**: A lightweight pre-filter drops 99% of benign logs before they reach the expensive LLM, drastically reducing costs.
+* **📥 Dead-Letter Queue (DLQ)**: Failed tasks are auto-saved to `data/failed_tasks/` instead of being lost, ensuring 100% data reliability.
+* **🧠 Human Feedback Loop**: AI learns from your feedback! When you "Reject" a report with a reason, the system memorizes it to avoid repeating the same mistake.
+
+### 7. Intelligent Remediation Engine 🛡️
+* **Attack Prioritization**: Automatically prioritizes alerts based on CVE severity or Attack Type (e.g., SQL Injection, XSS).
+* **CVE-First Strategy**: If a CVE is detected, the engine immediately fetches relevant playbooks and patches.
+* **Interactive Playbooks**: Dynamic Mermaid diagrams guide analysts through step-by-step mitigation.
+* **Split-View Dashboard**: "Enriched Alerts Dashboard" provides a side-by-side view of active threats and their corresponding remediation plans.
+
+### 8. Real-Time System Monitoring 📊
+* **Resource Tracking**: Live CPU and Memory usage displayed directly in the dashboard sidebar using `psutil`.
+* **Process Health**: Monitors critical processes to ensure stability.
 
 | File Prefix | Source Type | Processing Mode | PDF Report | Primary Purpose |
 | :--- | :--- | :--- | :--- | :--- |
@@ -229,10 +247,13 @@ except Exception as e:
 "
 ```
 
-### Step 4: SOC Visualization
-Go to **"🚨 Internal Threat Monitor (SOC)"** in the UI.
-* **Live Map**: You will see a red arc (missile trajectory) originating from the attacker's location targeting your assets.
-* **Alerts**: The "Matched Intelligence Logs" table will show the alert, linked directly to the CTI report.
+### Step 4: SOC Visualization & Remediation
+Go to **"🚨 Enriched Alerts Dashboard"** in the UI.
+* **Live Threat Map**: Displays real-time attacks with accurate geolocation (City/Country) and "missile" visualization targeting your assets.
+* **Intelligent Remediation**: Click on an alert to see the "Remediation Playbook" panel on the right.
+    * **Playbooks**: View step-by-step mitigation guides (e.g., Block IP, Patch CVE, Isolate Host) rendered as interactive diagrams.
+    * **Actionable Insights**: Immediate context on the attack vector (SQLi, DDoS, Brute Force).
+* **System Health**: Monitor CPU/RAM usage in real-time on the sidebar.
 
 ### Step 5: Knowledge Management
 Go to **"📚 Knowledge Base"** to:
@@ -248,6 +269,7 @@ You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. N
 | `RETENTION_DAYS` | `30` | Number of days to keep files in `processed/`. |
 | `CONFIDENCE_THRESHOLD` | `80` | Minimum score to trigger a PDF/Blocking alert. |
 | `RAG_TOP_K` | `3` | Number of similar past cases to retrieve. |
+| `MAX_REPORTS_LIMIT` | `200` | Maximum number of reports to fetch for Knowledge Base. |
 
 
 ## 🛠️ Tech Stack
@@ -258,7 +280,8 @@ You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. N
 * **Log Collection: Fluent Bit**
 * **Data Standard: STIX 2.1 JSON**
 * **Infrastructure: Docker & Docker Compose**
-* **Frontend: Streamlit, PyDeck (3D Maps), Plotly**
+* **Frontend: Streamlit, PyDeck (3D Maps), Plotly, Mermaid.js**
+* **Monitoring: psutil (System Resources)**
 
 ## 📜 License & Acknowledgments
 

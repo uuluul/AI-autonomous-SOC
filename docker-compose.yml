@@ -132,7 +132,7 @@ services:
       rabbitmq:
         condition: service_healthy
     #  抓情資 -> 產STIX -> 跑Sigma 的循環
-    command: ["sh", "/app/src/init_system.sh"] 
+    command: ["python", "-u", "/app/src/run_pipeline.py"] 
     networks:
       - opensearch-net
 
@@ -168,6 +168,7 @@ services:
     command: python -u /app/src/threat_hunting.py
     volumes:
       - ./src:/app/src
+      - ./out:/app/out
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_USER=admin

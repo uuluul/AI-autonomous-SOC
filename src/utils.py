@@ -92,7 +92,8 @@ def merge_extractions(extraction_list):
         "ttps": [],
         # 要在這裡初始化，不然 run_pipeline 讀不到
         "target_software": [],
-        "cve_ids": []
+        "cve_ids": [],
+        "attack_type": "Suspicious Activity" # Default
     }
     
     # 用來去重複
@@ -110,6 +111,10 @@ def merge_extractions(extraction_list):
     for ext in extraction_list:
         if not ext: continue
         valid_chunks += 1
+        
+        # Capture attack_type from the first chunk that has it
+        if "attack_type" in ext and merged["attack_type"] == "Suspicious Activity":
+             merged["attack_type"] = ext["attack_type"]
         
         # 合併摘要
         if ext.get("summary"):
@@ -157,3 +162,95 @@ def merge_extractions(extraction_list):
         merged["confidence_score"] = int(total_confidence / valid_chunks)
         
     return merged
+
+def get_ai_remediation(attack_type: str) -> str:
+    """
+    Simulates an AI-driven security consultant providing specific remediation steps 
+    based on the detected attack vector.
+    """
+    attack_type = attack_type.lower()
+    
+    if "ddos" in attack_type or "flood" in attack_type:
+        return """
+**1. Immediate Mitigation:**
+- **Activate Rate Limiting:** Implement strict rate limiting on the edge firewall (WAF) for the target IP.
+- **Geo-Blocking:** Temporarily block traffic from non-business-critical regions if the attack is geo-distributed.
+- **Enable Captcha:** Turn on aggressive Captcha challenges for all incoming web requests to filter out bots.
+
+**2. Investigation:**
+- **Analyze Flow Logs:** Identify the specific packet signatures (e.g., SYN flood, UDP amplification).
+- **Trace Source:** Determine if the attack is coming from a known botnet or spoofed IPs.
+
+**3. Long-term Hardening:**
+- **CDN Deployment:** Ensure all public-facing assets are behind a CDN (Cloudflare/Akamai) to absorb volumetric attacks.
+- **Anycast DNS:** Migrate to Anycast DNS to distribute load across global nodes.
+"""
+    elif "sql" in attack_type or "injection" in attack_type:
+        return """
+**1. Immediate Mitigation:**
+- **Block Malicious IPs:** Immediately block the source IPs attempting the injection.
+- **WAF Rules:** Apply strict WAF rules to block common SQL keywords (`UNION`, `SELECT`, `DROP`, `--`) in query parameters.
+- **Sanitize Input:** Ensure the application properly sanitizes all user inputs before passing them to the database.
+
+**2. Investigation:**
+- **Database Logs:** Check database query logs for any successful unauthorized queries or data exfiltration.
+- **Code Review:** Audit the vulnerable endpoint to identify and fix raw SQL queries.
+
+**3. Long-term Hardening:**
+- **Parameterized Queries:** Refactor code to use prepared statements (Parameterized Queries) exclusively.
+- **Least Privilege:** Ensure the database user used by the app has only the minimum necessary permissions.
+"""
+    elif "ransomware" in attack_type or "encrypt" in attack_type:
+        return """
+**1. CRITICAL RESPONSE (Containment):**
+- **Isolate Host:** IMMEDIATELY disconnect the infected host from the network (vLAN isolation) to prevent lateral movement.
+- **Snapshot Evidence:** Take a memory dump and disk snapshot of the infected machine for forensics BEFORE rebooting.
+
+**2. Eradication:**
+- **Scan Network:** Perform a full IOC scan across the entire subnet to check for other compromised hosts.
+- **Kill Processes:** Terminate any suspicious processes matching known ransomware signatures.
+
+**3. Recovery:**
+- **Restore from Backup:** Restore data from the last known good offline backup. DO NOT PAY THE RANSOM.
+- **Patch Entry Point:** Identify and patch the vulnerability (e.g., RDP, Phishing) used for initial access.
+"""
+    elif "brute" in attack_type or "password" in attack_type:
+        return """
+**1. Immediate Mitigation:**
+- **Lock Account:** Temporarily lock the targeted user account or force a password reset.
+- **Block Attacker:** Ban the source IP address after 5 failed login attempts.
+
+**2. Investigation:**
+- **Audit Auth Logs:** specific review of authentication logs to see if any attempt was successful.
+- **Check Credentials:** Verify if the user's credentials have been leaked in recent breaches (HaveIBeenPwned).
+
+**3. Long-term Hardening:**
+- **MFA Enforcement:** Enforce Multi-Factor Authentication (MFA) for ALL user accounts.
+- **Fail2Ban:** Deploy tools like Fail2Ban to automatically block repeated failed login attempts.
+"""
+    elif "xss" in attack_type or "script" in attack_type:
+        return """
+**1. Immediate Mitigation:**
+- **WAF Filtering:** Update WAF to block requests containing `<script>`, `javascript:`, and `on*` event handlers.
+- **Content Security Policy (CSP):** Enforce a strict CSP header to reject unauthorized script sources.
+
+**2. Investigation:**
+- **Session Audit:** Check for any suspicious active sessions or cookies stolen via the XSS payload.
+
+**3. Long-term Hardening:**
+- **Output Encoding:** Implement context-aware output encoding (HTML entity encoding) for all dynamic data.
+- **Cookie Flags:** Set `HttpOnly` and `Secure` flags on all session cookies to prevent client-side access.
+"""
+    else:
+        return """
+**1. General Investigation:**
+- **Log Analysis:** Review system and application logs around the time of the alert to understand the anomalous behavior.
+- **Traffic Inspection:** Capture and analyze packet captures (PCAP) to identify malicious payloads.
+
+**2. Containment:**
+- **Quarantine:** If the behavior is confirmed malicious, isolate the affected asset or block the source IP.
+
+**3. Remediation:**
+- **Update Signatures:** Ensure standard antivirus and IDS signatures are up to date.
+- **Baseline Review:** Compare current system state against the known good baseline.
+"""

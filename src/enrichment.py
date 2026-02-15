@@ -2,6 +2,7 @@ import geoip2.database
 import json
 import os
 import logging
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class EnrichmentEngine:
             logger.error(f"  GeoIP DB NOT FOUND at: {os.path.abspath(self.geoip_path)}")
             return None
 
+    @lru_cache(maxsize=1024)
     def enrich_ip(self, ip_address):
         """
         輸入一個 IP，回傳它的地理位置和內部資產資訊

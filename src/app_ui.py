@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from database import get_pending_tasks, update_task_status
 from setup_opensearch import get_opensearch_client, upload_to_opensearch
 from to_pdf import generate_pdf_report
+from utils import get_ai_remediation
 
 # 設定頁面
 st.set_page_config(page_title="CTI & SOC Platform", layout="wide", page_icon="🛡️")
@@ -80,7 +81,7 @@ def check_password():
 def get_all_reports():
     """從 OpenSearch 撈取所有歷史情資 (Knowledge Base)"""
     client = get_opensearch_client()
-    query = {"size": 50, "sort": [{"timestamp": "desc"}], "query": {"match_all": {}}}
+    query = {"size": 200, "sort": [{"timestamp": "desc"}], "query": {"match_all": {}}}
     try:
         response = client.search(index="cti-reports", body=query)
         return [hit['_source'] for hit in response['hits']['hits']]
@@ -157,6 +158,9 @@ def get_real_soc_data():
                     "lon": enrich.get('lon'),
                     "country": enrich.get('country', 'Unknown'),
                     "vulnerabilities": src.get("vulnerabilities", []),
+                    "summary": src.get("summary", ""),
+                    "message": src.get("message", ""),
+                    "file_path": src.get("filename", "")
                 })
         return pd.DataFrame(data)
     except:
@@ -256,34 +260,75 @@ if page == "🚨 Internal Threat Monitor (SOC)":
         # --- 地圖區塊 ---
         st.subheader("🌍 Real-time Attack Map (GeoIP Enabled)")
         
-        # 準備地圖資料
-        map_points = []
+        # Fallback Coordinates for common countries
+        COUNTRY_COORDINATES = {
+            "United States": {"lat": 37.0902, "lon": -95.7129},
+            "China": {"lat": 35.8617, "lon": 104.1954},
+            "Russia": {"lat": 61.5240, "lon": 105.3188},
+            "Germany": {"lat": 51.1657, "lon": 10.4515},
+            "France": {"lat": 46.2276, "lon": 2.2137},
+            "Japan": {"lat": 36.2048, "lon": 138.2529},
+            "Taiwan": {"lat": 23.6978, "lon": 120.9605}, # Source Taiwan
+            "Internal / Private": {"lat": 23.5, "lon": 121.0}, # Map internal threats to Central Taiwan (Visible Arc)
+            "Unknown": {"lat": 0, "lon": 0} # Null Island
+        }
+
+        # 準備地圖資料 (Grouped by IP for Denoising)
+        map_points = {}
+        
         for idx, row in df.iterrows():
+            ip = row['source_ip']
+            country = row.get('country', 'Unknown')
+            
+            # 1. Coordinate Fallback Logic
             lat = row.get('lat')
             lon = row.get('lon')
-            if lat and lon and not (pd.isna(lat) or pd.isna(lon)):
-                map_points.append({
-                    "ip": row['source_ip'], 
-                    "lat": float(lat), 
-                    "lon": float(lon),
-                    "country": row.get('country', 'Unknown')
-                })
+            
+            if pd.isna(lat) or pd.isna(lon):
+                # Try fallback
+                fallback = COUNTRY_COORDINATES.get(country)
+                # Fallback to "Unknown" if not found but prevent total loss
+                if not fallback:
+                     fallback = COUNTRY_COORDINATES.get("Unknown")
+                
+                if fallback:
+                    lat = fallback["lat"]
+                    lon = fallback["lon"]
+            
+            if lat is not None and lon is not None:
+                if ip not in map_points:
+                    map_points[ip] = {
+                        "ip": ip, 
+                        "lat": float(lat), 
+                        "lon": float(lon),
+                        "country": country,
+                        "attack_count": 0
+                    }
+                map_points[ip]["attack_count"] += 1
         
         if map_points:
+            # Convert dict back to list for PyDeck
+            point_data = list(map_points.values())
+            
             # 定義防禦目標 (預設：台灣)
             TARGET_COORDS = [121.5, 25.0] 
             
             # 準備連線資料
             arc_data = []
-            for p in map_points:
+            for p in point_data:
+                # Pre-calculate width to avoid "Function calls not allowed" error in JS
+                width = min(10, 2 + (p["attack_count"] * 0.5))
+                
                 arc_data.append({
                     "source_ip": p["ip"],
                     "source_coords": [p["lon"], p["lat"]],
                     "target_coords": TARGET_COORDS,
-                    "country": p["country"]
+                    "country": p["country"],
+                    "attack_count": p["attack_count"],
+                    "stroke_width": width
                 })
 
-            # 低弧度飛行路徑
+            # 低弧度飛行路徑 (Dynamic Width by Pre-calculated field)
             arc_layer = pdk.Layer(
                 "ArcLayer",
                 data=arc_data,
@@ -291,16 +336,16 @@ if page == "🚨 Internal Threat Monitor (SOC)":
                 get_target_position="target_coords",
                 get_source_color=[255, 50, 50, 150], # 紅色半透明
                 get_target_color=[0, 255, 100, 150], # 綠色半透明
-                get_width=2,
+                get_width="stroke_width", # Use pre-calculated field
                 pickable=True,
                 great_circle=False, # 2D 平面線條
-                get_height=0.5,   # 如果覺得線還是太低，可以註解這行來拉高它
+                get_height=0.5,
             )
 
-            # ScatterplotLayer (紅點)
+            # ScatterplotLayer (紅點, Aggregated)
             scatterplot_layer = pdk.Layer(
                 "ScatterplotLayer",
-                data=map_points,
+                data=point_data,
                 get_position=["lon", "lat"],
                 get_color=[255, 50, 50, 200],
                 get_radius=100000, # 半徑大小
@@ -309,99 +354,141 @@ if page == "🚨 Internal Threat Monitor (SOC)":
 
             # 渲染地圖
             st.pydeck_chart(pdk.Deck(
-                map_style=None, # 或 "mapbox://styles/mapbox/dark-v10" (如果有 Token)
+                map_style=None,
                 initial_view_state=pdk.ViewState(
                     latitude=20, 
                     longitude=100, 
                     zoom=1.2, 
-                    pitch=0,   # 預設為 0 確保是平面視角
+                    pitch=0,
                     bearing=0
                 ),
                 layers=[arc_layer, scatterplot_layer],
-                tooltip={"text": "Attacker: {source_ip}\nOrigin: {country}"}
+                tooltip={"text": "Attacker: {source_ip}\nOrigin: {country}\nAttacks: {attack_count}"}
             ))
         else:
             st.warning("Threats detected but no GeoIP data available.")
 
-        # --- 漏洞分析表格區塊 ---
-        st.subheader("🛡️ Vulnerability & Remediation")
+        # --- Intelligent Remediation Engine (AI-Driven) ---
+        st.subheader("🛡️ Intelligent Remediation Engine")
         
-        all_vulns = []
+        # 1. Grouping Logic
+        unique_threats = {} # Key: Identifier (CVE or Attack Type) -> Value: Threat Info
+
         for _, row in df.iterrows():
+            # Check for specific CVEs first (Higher Priority)
             vulns = row.get("vulnerabilities", [])
-            if isinstance(vulns, list):
-                all_vulns.extend(vulns)
+            if isinstance(vulns, list) and vulns:
+                for v in vulns:
+                    # Specific CVE found
+                    vid = v.get("id")
+                    if not vid: # Fallback for empty ID (Generic Remediation Case)
+                        vid = row.get("attack_type", "Unknown Threat")
+                        # USE AI PLAYBOOK for generic threats (Overwrite static JSON text)
+                        remediation_text = get_ai_remediation(vid)
+                    else:
+                        # Use CVE specific remediation
+                        remediation_text = v.get("remediation", "No remediation available.")
+                    
+                    if vid not in unique_threats:
+                        unique_threats[vid] = {
+                            "type": "CVE Exploit" if v.get("id") else "AI Anomaly",
+                            "severity": v.get("severity", "High"),
+                            "description": v.get("description", "No description available."),
+                            "remediation": remediation_text,
+                            "count": 1,
+                            "source_ips": {row.get('source_ip')} if row.get('source_ip') else set(),
+                        }
+                    else:
+                        unique_threats[vid]["count"] += 1
+                        if row.get('source_ip'):
+                             if "source_ips" not in unique_threats[vid]:
+                                 unique_threats[vid]["source_ips"] = set()
+                             unique_threats[vid]["source_ips"].add(row.get('source_ip'))
+                        
+                    # Collect Evidence (Unified)
+                    if "evidence" not in unique_threats[vid]:
+                        unique_threats[vid]["evidence"] = set()
+                    
+                    msg = row.get('summary') or row.get('message') or "No details"
+                    fname = row.get('file_path') or row.get('related_report') or "Unknown Source"
+                    evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
+                    unique_threats[vid]["evidence"].add(evidence_str)
+            else:
+                # No CVE? Use AI Attack Type Classification (e.g., DDoS, Brute Force)
+                attack_type = row.get("attack_type", "Suspicious Activity")
+                if attack_type not in unique_threats:
+                    # Construct smart default remediation based on attack type (AI-Driven)
+                    if row.get("Mitigation"):
+                        default_remediation = row.get("Mitigation") # Use provided mitigation if available
+                    else:
+                        default_remediation = get_ai_remediation(attack_type) # Fallback to AI Playbook
+                    
+                    unique_threats[attack_type] = {
+                        "type": "Behavioral Pattern",
+                        "severity": row.get("severity", "Medium"),
+                        "description": f"AI detected {attack_type} pattern from {row.get('source_ip', 'unknown source')}.",
+                        "remediation": default_remediation,
+                        "count": 1,
+                        "source_ips": {row.get('source_ip')} if row.get('source_ip') else set(),
+                    }
+                else:
+                    unique_threats[attack_type]["count"] += 1
+                    ip = row.get('source_ip')
+                    # ... (rest of logic)
+                    if ip:
+                        if "source_ips" not in unique_threats[attack_type]:
+                            unique_threats[attack_type]["source_ips"] = set()
+                        unique_threats[attack_type]["source_ips"].add(ip)
+                        # Update description if multiple IPs are detected
+                        if len(unique_threats[attack_type]["source_ips"]) > 1:
+                             unique_threats[attack_type]["description"] = f"AI detected {attack_type} pattern from multiple sources ({len(unique_threats[attack_type]['source_ips'])} unique IPs)."
+                    
+                # Collect Evidence (Unified)
+                if "evidence" not in unique_threats[attack_type]:
+                    unique_threats[attack_type]["evidence"] = set()
+                
+                msg = row.get('summary') or row.get('message') or "No details"
+                fname = row.get('file_path') or row.get('related_report') or "Unknown Source"
+                evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
+                unique_threats[attack_type]["evidence"].add(evidence_str)
 
-        if all_vulns:
-            vuln_df = pd.DataFrame(all_vulns)
+        if unique_threats:
+            # 2. Full-Width Stacked Layout (No Columns)
+            st.markdown("#### � Defense Playbooks (AI Generated)")
             
-            if "id" in vuln_df.columns:
-                vuln_df = vuln_df.drop_duplicates(subset=['id'])
-
-            # 欄位改名
-            vuln_df = vuln_df.rename(columns={
-                "id": "ID",
-                "severity": "Severity",
-                "description": "Description",
-                "remediation": "Remediation"
-            })
-
-            display_cols = ["ID", "Severity", "Description", "Remediation"]
-            final_df = vuln_df[[c for c in display_cols if c in vuln_df.columns]]
-
-            # --- CSS ---
-            st.markdown("""
-            <style>
-            table {
-                width: 100% !important;
-                table-layout: fixed !important;
-                border-collapse: collapse !important;
-            }
-            
-            /* 1. 隱藏第一欄 (Index) - 包含標題與內容 */
-            th:nth-child(1), td:nth-child(1) {
-                display: none !important;
-                width: 0px !important;
-            }
-
-            /* 2. ID (實際上的第2欄) - 單行 */
-            th:nth-child(2), td:nth-child(2) {
-                width: 15% !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                vertical-align: top !important;
-            }
-
-            /* 3. Severity (實際上的第3欄) - 單行 */
-            th:nth-child(3), td:nth-child(3) {
-                width: 10% !important;
-                white-space: nowrap !important;
-                vertical-align: top !important;
-            }
-
-            /* 4. Description (實際上的第4欄) - 多行，37.5% */
-            th:nth-child(4), td:nth-child(4) {
-                width: 37.5% !important;
-                white-space: normal !important; /* 允許換行 */
-                word-wrap: break-word !important;
-                vertical-align: top !important;
-            }
-
-            /* 5. Remediation (實際上的第5欄) - 多行，37.5% */
-            th:nth-child(5), td:nth-child(5) {
-                width: 37.5% !important;
-                white-space: normal !important; /* 允許換行 */
-                word-wrap: break-word !important;
-                vertical-align: top !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-
-            st.table(final_df)
+            for tid, info in unique_threats.items():
+                # Dynamic color based on severity
+                severity_color = "red" if info["severity"] == "High" else "orange"
+                
+                # Enhanced Title: 🚨 [High] Defense Playbook: SQL Injection (Behavioral Pattern)
+                expander_title = f"🚨 [{info['severity']}] Defense Playbook: {tid} ({info['type']})"
+                
+                with st.expander(expander_title, expanded=False):
+                    st.markdown(f"**Severity**: :{severity_color}[{info['severity']}]")
+                    st.markdown(f"**Context**: {info['description']}")
+                    
+                    st.info(f"**Action Plan**:\n\n{info['remediation']}")
+                    
+                    # --- Evidence Section ---
+                    st.markdown("---")
+                    st.markdown("**Evidence / Associated Logs:**")
+                    evidence_list = list(info.get("evidence", []))
+                    
+                    # Limit to 5 items
+                    max_items = 5
+                    display_items = evidence_list[:max_items]
+                    
+                    for item in display_items:
+                        st.code(item, language="text")
+                        
+                    if len(evidence_list) > max_items:
+                        st.caption(f"... and {len(evidence_list) - max_items} more logs.")
+                    
+                    if info["count"] > 1:
+                        st.caption(f"👀 Affecting {info['count']} separate alerts.")
             
         else:
-            st.info("No known CVE vulnerability correlations detected in current incidents.")
+            st.info("No active threats requiring remediation. System Clean.")
 
 # --- Enriched Alerts Dashboard (CMDB 面板) ---
 elif page == "📈 Enriched Alerts Dashboard":
@@ -498,8 +585,26 @@ elif page == "🔍 CTI Report Review":
             st.success(f"Approved! PDF generated at: {pdf_path}")
             st.rerun()
 
+        rejection_reason = st.text_input("Rejection Reason (Optional - helps AI learn):", key=f"reason_{task['id']}")
         if st.button("🗑️ Reject"):
             update_task_status(task['id'], "REJECTED")
+            
+            # Optimization 5: Human Feedback Loop
+            # 將誤判案例存入 ai-feedback index
+            if rejection_reason:
+                feedback_doc = {
+                    "timestamp": datetime.now().isoformat(),
+                    "filename": task['filename'],
+                    "content": task['raw_content'],
+                    "reason": rejection_reason,
+                    "original_analysis": task['analysis_json']
+                }
+                try:
+                    upload_to_opensearch(feedback_doc, f"feedback_{task['id']}", "ai-feedback")
+                    st.success("Feedback saved! AI will learn from this mistake.")
+                except Exception as e:
+                    st.error(f"Failed to save feedback: {e}")
+            
             st.rerun()
 
 # --- Threat Graph ---
@@ -521,6 +626,7 @@ elif page == "📚 Knowledge Base":
     if not all_reports:
         st.info("No reports found.")
     else:
+        st.caption(f"Loaded {len(all_reports)} reports from database.")
         # Filter 邏輯
         unique_sources = list(set([r.get('source_type', 'Unknown') for r in all_reports]))
         all_ttps = set()
@@ -584,6 +690,16 @@ elif page == "📚 Knowledge Base":
                     with c1:
                         st.subheader("Indicators")
                         st.json(r.get('indicators', {}))
+                        
+                        vulns = r.get('vulnerabilities', [])
+                        if vulns:
+                            st.subheader("🛡️ Vulnerabilities & Remediation")
+                            for v in vulns:
+                                st.markdown(f"**{v.get('id')}** (Severity: {v.get('severity')})")
+                                st.markdown(f"_{v.get('description')}_")
+                                st.markdown(f"**Remediation:** {v.get('remediation')}")
+                                st.divider()
+                                
                         st.subheader("TTPs")
                         st.json(r.get('ttps', {}))
                     with c2:
