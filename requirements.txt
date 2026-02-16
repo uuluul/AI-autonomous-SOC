@@ -20,3 +20,4 @@ pyyaml
 selenium 
 webdriver-manager
 OTXv2>=1.5.12
+pytest>=8.0.0
