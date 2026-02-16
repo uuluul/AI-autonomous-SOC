@@ -213,6 +213,141 @@ services:
       opensearch-node:
         condition: service_healthy
 
+  # Adversarial Prediction Engine (Phase 1)
+  prediction-engine:
+    build: .
+    container_name: prediction-engine
+    command: python /app/src/adversarial_engine.py
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./.env:/app/.env
+    env_file: .env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opensearch-node:
+        condition: service_healthy
+    networks:
+      - opensearch-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Decoy Manager (Phase 2 — Honeypot Orchestration)
+  decoy-manager:
+    build: .
+    container_name: decoy-manager
+    command: python /app/src/decoy_manager.py
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./.env:/app/.env
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker API access (read-only)
+    env_file: .env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+      - MAX_ACTIVE_DECOYS=10
+      - DECOY_TTL_HOURS=4
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opensearch-node:
+        condition: service_healthy
+    networks:
+      - opensearch-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Validation Engine (Phase 2 — Feedback Loop)
+  validation-engine:
+    build: .
+    container_name: validation-engine
+    command: python /app/src/validation_engine.py
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./.env:/app/.env
+    env_file: .env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opensearch-node:
+        condition: service_healthy
+    networks:
+      - opensearch-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # MTD Controller (Phase 3 — Moving Target Defense Orchestrator)
+  mtd-controller:
+    build: .
+    container_name: mtd-controller
+    command: python /app/src/mtd_controller.py
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./.env:/app/.env
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    env_file: .env
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+      - MTD_APPROVAL_TIMEOUT=15
+      - MTD_DRAIN_TIMEOUT=30
+      - MTD_ROLLBACK_HOURS=4
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opensearch-node:
+        condition: service_healthy
+    networks:
+      - opensearch-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # MTD Proxy (Phase 3 — OpenResty with Lua Obfuscation)
+  mtd-proxy:
+    image: openresty/openresty:alpine
+    container_name: mtd-proxy
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./config/mtd_nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./data/obfuscation_profiles.json:/etc/nginx/obfuscation_profiles.json:ro
+    networks:
+      - opensearch-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
 networks:
   opensearch-net:
     driver: bridge

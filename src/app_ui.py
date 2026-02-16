@@ -321,6 +321,8 @@ if check_permission("REVIEW_REPORT"):
     nav_options.append("🔍 CTI Report Review")
 if check_permission("VIEW_AUDIT"):
     nav_options.append("📜 Audit & Compliance Trail")
+nav_options.append("🎯 Predictive Threat Map")
+nav_options.append("🛡️ Moving Target Defense")
 
 page = st.sidebar.radio("Navigation", nav_options)
 
@@ -1009,3 +1011,259 @@ elif page == "📜 Audit & Compliance Trail":
         else:
             if not df_audit.empty:
                 st.caption("🔒 Export requires Tier 2+ Role.")
+
+# --- Predictive Threat Map ---
+elif page == "🎯 Predictive Threat Map":
+    st.title(f"🎯 Predictive Threat Map ({selected_tenant})")
+    st.caption("AI-driven attack path predictions \u2014 powered by REDSPEC adversarial emulation & zero-log anticipation.")
+
+    predictions = get_predictions(selected_tenant)
+
+    if not predictions:
+        st.info("No predictions generated yet. Predictions are triggered when high-risk alerts are detected or global threat outbreaks are identified.")
+    else:
+        # \u2500\u2500 Top metrics \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        active_preds = [p for p in predictions if p.get("status") == "ACTIVE"]
+        preemptive_preds = [p for p in predictions if p.get("status") == "PREEMPTIVE"]
+        avg_risk = sum(p.get("overall_risk_score", 0) for p in predictions) / len(predictions) if predictions else 0
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Predictions", len(predictions))
+        m2.metric("Active (Alert-Triggered)", len(active_preds))
+        m3.metric("Preemptive (Zero-Log)", len(preemptive_preds))
+        m4.metric("Avg Risk Score", f"{avg_risk:.1f}")
+
+        # \u2500\u2500 Tabs for alert-triggered vs zero-log \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        tab1, tab2 = st.tabs(["\ud83d\udea8 Attack Path Predictions", "\ud83d\udee1\ufe0f Zero-Log Preemptive Alerts"])
+
+        with tab1:
+            if not active_preds:
+                st.info("No alert-triggered predictions yet.")
+            else:
+                for pred in active_preds:
+                    risk = pred.get("overall_risk_score", 0)
+                    risk_color = "\ud83d\udd34" if risk >= 70 else "\ud83d\udfe1" if risk >= 40 else "\ud83d\udfe2"
+                    host_info = pred.get("compromised_host", {})
+
+                    with st.expander(
+                        f"{risk_color} Risk {risk:.0f} | "
+                        f"{host_info.get('hostname', '?')} ({host_info.get('ip', '?')}) | "
+                        f"{pred.get('timestamp', '')[:19]}",
+                        expanded=(risk >= 70),
+                    ):
+                        st.markdown(f"**Prediction ID**: `{pred.get('prediction_id', '?')}`")
+                        st.markdown(f"**Trigger Alert**: `{pred.get('trigger_alert_id', 'N/A')}`")
+                        st.markdown(f"**Compromised Zone**: `{host_info.get('zone', '?')}`")
+
+                        # Kill Chain Table
+                        chain = pred.get("predicted_kill_chain", [])
+                        if chain:
+                            st.markdown("#### \ud83c\udfaf Predicted Kill Chain")
+                            chain_data = []
+                            for step in chain:
+                                conf = step.get("confidence", 0)
+                                conf_bar = "\u2588" * int(conf * 10) + "\u2591" * (10 - int(conf * 10))
+                                chain_data.append({
+                                    "Step": step.get("step", "?"),
+                                    "Tactic": step.get("tactic", "?"),
+                                    "Technique": f"{step.get('technique_id', '?')} \u2014 {step.get('technique_name', '?')}",
+                                    "Target": f"{step.get('target_host', '?')} ({step.get('target_ip', '?')})",
+                                    "Confidence": f"{conf_bar} {conf:.0%}",
+                                    "Rationale": step.get("exploit_rationale", step.get("reasoning", "")),
+                                })
+                            st.dataframe(pd.DataFrame(chain_data), use_container_width=True, hide_index=True)
+
+                        # Defensive recommendations
+                        actions = pred.get("recommended_actions", [])
+                        if actions:
+                            st.markdown("#### \ud83d\udee1\ufe0f Recommended Defensive Actions")
+                            for i, action in enumerate(actions, 1):
+                                st.markdown(f"{i}. {action}")
+
+        with tab2:
+            if not preemptive_preds:
+                st.info("No zero-log preemptive alerts. Your assets are not currently exposed to any active global outbreaks.")
+            else:
+                for pred in preemptive_preds:
+                    risk = pred.get("overall_risk_score", 0)
+                    cve_id = pred.get("cve_id", "Unknown CVE")
+
+                    with st.expander(
+                        f"\ud83d\udea8 {cve_id} | Risk {risk:.0f} | {pred.get('timestamp', '')[:19]}",
+                        expanded=True,
+                    ):
+                        st.markdown(f"**Prediction ID**: `{pred.get('prediction_id', '?')}`")
+                        st.markdown(f"**Status**: `PREEMPTIVE` \u2014 No local attacks detected yet")
+
+                        # Exposed assets
+                        exposed = pred.get("exposed_assets", [])
+                        if exposed:
+                            st.markdown("#### \u26a0\ufe0f Exposed Assets")
+                            ea_data = []
+                            for a in exposed:
+                                ea_data.append({
+                                    "Hostname": a.get("hostname", "?"),
+                                    "IP": a.get("ip", "?"),
+                                    "Zone": a.get("network_zone", "?"),
+                                    "Criticality": a.get("criticality", "?"),
+                                    "Vulnerable Software": a.get("matched_software", "?"),
+                                })
+                            st.dataframe(pd.DataFrame(ea_data), use_container_width=True, hide_index=True)
+
+                        # LLM defense plan
+                        plan = pred.get("prediction", {})
+                        if plan:
+                            st.markdown(f"#### \ud83d\udcdd {plan.get('alert_title', 'Defense Plan')}")
+                            st.markdown(plan.get("risk_assessment", ""))
+
+                            actions = plan.get("immediate_actions", [])
+                            if actions:
+                                st.markdown("**Immediate Actions:**")
+                                for a in actions:
+                                    st.markdown(f"- {a}")
+
+                            patching = plan.get("patching_priority", [])
+                            if patching:
+                                st.markdown("**Patching Priority:**")
+                                st.dataframe(pd.DataFrame(patching), use_container_width=True, hide_index=True)
+
+                            window = plan.get("estimated_patch_window")
+                            if window:
+                                st.metric("Estimated Patch Window", window)
+
+# =====================================================
+# 🛡️ Moving Target Defense (Phase 3)
+# =====================================================
+elif page == "🛡️ Moving Target Defense":
+    st.title("🛡️ Moving Target Defense")
+    st.caption("Phase 3 — Dynamic obfuscation & container migration to invalidate attacker reconnaissance.")
+
+    # ─── Helper: Query MTD indices ────────────────────
+    def get_mtd_data(index_name, size=50):
+        try:
+            resp = client.search(
+                index=index_name,
+                body={"query": {"match_all": {}}, "size": size, "sort": [{"proposed_at": {"order": "desc", "unmapped_type": "date"}}, {"created_at": {"order": "desc", "unmapped_type": "date"}}]},
+            )
+            return [hit["_source"] for hit in resp["hits"]["hits"]]
+        except Exception:
+            return []
+
+    def get_mtd_audit(size=100):
+        try:
+            resp = client.search(
+                index="mtd-audit-log",
+                body={"query": {"match_all": {}}, "size": size, "sort": [{"proposed_at": {"order": "desc", "unmapped_type": "date"}}]},
+            )
+            return [hit["_source"] for hit in resp["hits"]["hits"]]
+        except Exception:
+            return []
+
+    # ─── Metrics Row ──────────────────────────────────
+    mutations = get_mtd_data("mtd-active-mutations", 100)
+    audit_entries = get_mtd_audit(200)
+
+    obf_rules = [m for m in mutations if m.get("mutation_type") == "obfuscation" and m.get("status") == "ACTIVE"]
+    active_migrations = [m for m in mutations if m.get("mutation_type") == "migration" and m.get("status") == "COMPLETED"]
+    pending = [a for a in audit_entries if a.get("status") == "PENDING_APPROVAL"]
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("🎭 Active Obfuscation Rules", len(obf_rules))
+    col2.metric("🔄 Active Migrations", len(active_migrations))
+    col3.metric("⏳ Pending Approvals", len(pending))
+    col4.metric("📝 Total MTD Actions", len(audit_entries))
+
+    st.markdown("---")
+
+    # ─── Tabs ─────────────────────────────────────────
+    tab1, tab2, tab3, tab4 = st.tabs(["🎭 Obfuscation Rules", "⏳ Pending Approvals", "🔄 Migrations", "📝 Audit Log"])
+
+    # ── Tab 1: Active Obfuscation Rules ───────────────
+    with tab1:
+        st.subheader("🎭 Active Obfuscation Rules")
+        st.caption("Currently active header/banner spoofing rules applied to suspicious scanner IPs.")
+
+        if obf_rules:
+            for rule in obf_rules:
+                with st.expander(f"🎭 {rule.get('scanner_ip', 'N/A')} → Spoofing: {rule.get('spoof_profile', 'N/A')}", expanded=False):
+                    rc1, rc2, rc3 = st.columns(3)
+                    rc1.markdown(f"**Scanner IP:** `{rule.get('scanner_ip', 'N/A')}`")
+                    rc2.markdown(f"**Target:** {rule.get('target_host', 'N/A')}")
+                    rc3.markdown(f"**Real Service:** {rule.get('real_service', 'N/A')}")
+
+                    sc = rule.get("spoof_config", {})
+                    st.markdown(f"**Spoofed Server Header:** `{sc.get('server_header', 'N/A')}`")
+                    st.markdown(f"**X-Powered-By:** `{sc.get('x_powered_by', 'None')}`")
+                    st.markdown(f"**Expires:** {rule.get('expires_at', 'N/A')}")
+                    st.markdown(f"**Trigger:** {rule.get('trigger_reason', 'N/A')}")
+        else:
+            st.info("No active obfuscation rules. Rules are created when the MTD score exceeds 60.")
+
+    # ── Tab 2: Pending Approvals ──────────────────────
+    with tab2:
+        st.subheader("⏳ Actions Pending Approval")
+        st.caption("MTD migration actions requiring Tier 2+ analyst approval before execution.")
+
+        if pending:
+            for action in pending:
+                with st.container():
+                    st.markdown(f"### 🔔 {action.get('action_type', 'N/A').upper()}")
+                    ac1, ac2, ac3, ac4 = st.columns(4)
+                    ac1.metric("MTD Score", f"{action.get('score', 0):.0f}")
+                    ac2.markdown(f"**Target:** {action.get('target_host', 'N/A')}")
+                    ac3.markdown(f"**Scanner:** `{action.get('scanner_ip', 'N/A')}`")
+                    ac4.markdown(f"**Deadline:** {action.get('approval_deadline', 'N/A')}")
+
+                    signals = action.get("signals", {})
+                    st.markdown(
+                        f"**Signals:** Prediction Risk={signals.get('prediction_risk', 0)}, "
+                        f"Captures={signals.get('captures', 0)}, "
+                        f"Scans={signals.get('scan_count', 0)}, "
+                        f"Criticality={signals.get('criticality', 'N/A')}"
+                    )
+
+                    bcol1, bcol2 = st.columns(2)
+                    if check_permission("APPROVE_MIGRATION"):
+                        if bcol1.button("✅ Approve", key=f"approve_{action.get('action_id')}"):
+                            st.success(f"Approved: {action.get('action_id')}")
+                        if bcol2.button("❌ Reject", key=f"reject_{action.get('action_id')}"):
+                            st.warning(f"Rejected: {action.get('action_id')}")
+                    else:
+                        st.warning("🔒 Requires Tier 2+ role to approve/reject.")
+                    st.markdown("---")
+        else:
+            st.info("No pending approvals. Actions requiring human review will appear here.")
+
+    # ── Tab 3: Active Migrations ──────────────────────
+    with tab3:
+        st.subheader("🔄 Container Migrations")
+        st.caption("Blue/Green container migrations that have been executed or are in progress.")
+
+        if active_migrations:
+            for mig in active_migrations:
+                with st.expander(f"🔄 {mig.get('target_container', 'N/A')} — {mig.get('status', 'N/A')}", expanded=False):
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.markdown(f"**Migration ID:** `{mig.get('migration_id', 'N/A')[:12]}`")
+                    mc2.markdown(f"**Status:** {mig.get('status', 'N/A')}")
+                    mc3.markdown(f"**Green IP:** `{mig.get('green_ip', 'N/A')}`")
+                    st.markdown(f"**Rollback Until:** {mig.get('can_rollback_until', 'N/A')}")
+                    st.markdown(f"**Trigger:** {mig.get('trigger_reason', 'N/A')}")
+
+                    if check_permission("ROLLBACK_MTD"):
+                        if st.button("↩️ Rollback", key=f"rb_{mig.get('migration_id')}"):
+                            st.warning(f"Rollback requested for {mig.get('migration_id', 'N/A')[:12]}")
+        else:
+            st.info("No active migrations. Blue/Green migrations appear here when MTD score ≥ 85 and approved.")
+
+    # ── Tab 4: Audit Log ──────────────────────────────
+    with tab4:
+        st.subheader("📝 MTD Audit Trail")
+        st.caption("Immutable record of all MTD actions — obfuscation, migration, approval, rejection, and rollback.")
+
+        if audit_entries:
+            audit_df = pd.DataFrame(audit_entries)
+            display_cols = [c for c in ["action_id", "action_type", "status", "score", "target_host", "scanner_ip", "proposed_at", "approved_by"] if c in audit_df.columns]
+            if display_cols:
+                st.dataframe(audit_df[display_cols], use_container_width=True, hide_index=True)
+        else:
+            st.info("No MTD audit entries yet. Actions will be logged here as they occur.")

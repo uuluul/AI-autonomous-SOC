@@ -1,6 +1,71 @@
 {
-    "192.168.1.10": {"owner": "HR Dept", "criticality": "Low", "hostname": "HR-Printer"},
-    "192.168.1.50": {"owner": "IT Dept", "criticality": "Critical", "hostname": "AD-Controller-01"},
-    "192.168.1.100": {"owner": "Finance", "criticality": "High", "hostname": "Finance-DB-Server"},
-    "10.0.0.1": {"owner": "Network Team", "criticality": "Critical", "hostname": "Core-Switch"}
+    "192.168.1.10": {
+        "hostname": "HR-Printer",
+        "owner": "HR Dept",
+        "criticality": "Low",
+        "subnet": "192.168.1.0/24",
+        "network_zone": "corporate",
+        "os": "Linux 5.15",
+        "software": [
+            "CUPS 2.4.1"
+        ],
+        "open_ports": [
+            631,
+            22
+        ]
+    },
+    "192.168.1.50": {
+        "hostname": "AD-Controller-01",
+        "owner": "IT Dept",
+        "criticality": "Critical",
+        "subnet": "192.168.1.0/24",
+        "network_zone": "core_infra",
+        "os": "Windows Server 2022",
+        "software": [
+            "Active Directory",
+            "DNS Server",
+            "Kerberos"
+        ],
+        "open_ports": [
+            389,
+            636,
+            88,
+            445,
+            3389
+        ]
+    },
+    "192.168.1.100": {
+        "hostname": "Finance-DB-Server",
+        "owner": "Finance",
+        "criticality": "High",
+        "subnet": "192.168.1.0/24",
+        "network_zone": "data_tier",
+        "os": "Ubuntu 22.04",
+        "software": [
+            "PostgreSQL 15.2",
+            "OpenSSH 8.9",
+            "Apache Log4j 2.14"
+        ],
+        "open_ports": [
+            5432,
+            22
+        ]
+    },
+    "10.0.0.1": {
+        "hostname": "Core-Switch",
+        "owner": "Network Team",
+        "criticality": "Critical",
+        "subnet": "10.0.0.0/8",
+        "network_zone": "core_infra",
+        "os": "Cisco IOS XE 17.9",
+        "software": [
+            "SNMP v3",
+            "SSH Server"
+        ],
+        "open_ports": [
+            22,
+            161,
+            443
+        ]
+    }
 }

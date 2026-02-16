@@ -7,8 +7,63 @@ import os
 # RabbitMQ Config
 RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'rabbitmq')
 RABBITMQ_QUEUE = 'cti_queue'
+HONEYPOT_QUEUE = 'honeypot_events'            # Phase 2: Deception telemetry
 RABBITMQ_USER = os.getenv('RABBITMQ_DEFAULT_USER', 'user')
 RABBITMQ_PASS = os.getenv('RABBITMQ_DEFAULT_PASS', 'password')
+
+
+def relay_honeypot_event(raw_data):
+    """
+    Phase 2 — Relay honeypot telemetry from Fluent Bit sidecar
+    to the 'honeypot_events' RabbitMQ queue.
+
+    Path:  Fluent Bit sidecar (honeypot-net)
+           → HTTP POST /honeypot_event (this endpoint)
+           → RabbitMQ honeypot_events queue
+           → Validation Engine
+    """
+    try:
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST, credentials=credentials,
+                connection_attempts=3, retry_delay=2,
+            )
+        )
+        channel = connection.channel()
+        channel.queue_declare(queue=HONEYPOT_QUEUE, durable=True)
+
+        payloads = json.loads(raw_data)
+
+        # Fluent Bit HTTP output sends [[timestamp, record], ...]
+        if isinstance(payloads, list):
+            for item in payloads:
+                if isinstance(item, list) and len(item) >= 2:
+                    record = item[1]
+                elif isinstance(item, dict):
+                    record = item
+                else:
+                    continue
+                channel.basic_publish(
+                    exchange='',
+                    routing_key=HONEYPOT_QUEUE,
+                    body=json.dumps(record),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+        elif isinstance(payloads, dict):
+            channel.basic_publish(
+                exchange='',
+                routing_key=HONEYPOT_QUEUE,
+                body=json.dumps(payloads),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+
+        connection.close()
+        print(f"  [SOAR] 🍯 Honeypot telemetry relayed to RabbitMQ ({HONEYPOT_QUEUE})", flush=True)
+    except Exception as e:
+        import traceback
+        print(f"  [SOAR] ❌ Honeypot relay failed: {repr(e)}", flush=True)
+        traceback.print_exc()
 
 def send_to_rabbitmq(msg):
     try:
@@ -74,6 +129,14 @@ class SimpleHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"Ingested")
                 self.wfile.write(b"Ingested")
+                return
+
+            # ─── Phase 2: Honeypot Telemetry Relay ────────
+            if self.path == '/honeypot_event':
+                relay_honeypot_event(post_data)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"Honeypot event relayed")
                 return
 
             if self.path == '/unblock':

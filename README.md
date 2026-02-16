@@ -1,365 +1,497 @@
-# 🛡️ NeoVigil: AI-Powered Hybrid SOC Pipeline
+<div align="center">
 
-> **Next-Gen Cyber Threat Intelligence Platform with Hybrid Data Ingestion & Dual-Layer RAG**
+# 🛡️ NeoVigil
 
-![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Stream%20%2B%20RAG-blueviolet)
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Compose-orange.svg)
-![Component](https://img.shields.io/badge/Queue-RabbitMQ-red.svg)
-![Component](https://img.shields.io/badge/Ingest-Fluent%20Bit-green.svg)
+### The Active Adversarial Architecture for Autonomous Cyber Defense
+
+**Predict · Deceive · Mutate**
+
+[![Architecture](https://img.shields.io/badge/Architecture-Active%20Adversarial%20Defense-blueviolet?style=for-the-badge)]()
+[![Phase](https://img.shields.io/badge/Active%20Defense-Triad%20Complete-brightgreen?style=for-the-badge)]()
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)]()
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)]()
+[![OpenSearch](https://img.shields.io/badge/OpenSearch-Vector%20KNN-005EB8?style=for-the-badge)]()
+[![RabbitMQ](https://img.shields.io/badge/Queue-RabbitMQ-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)]()
 
 ---
 
-**NeoVigil** is a production-ready Security Operations Center (SOC) pipeline that automates the lifecycle of threat detection. It uniquely combines **streaming log analysis** (via Fluent Bit) and **static intelligence processing** (via Automated Crawlers) into a unified, AI-driven engine.
+*NeoVigil is a next-generation, AI-powered Security Operations Center that transcends passive detection. It constructs an **Active Defense Triad** — predicting attack paths before they materialize, deploying self-evolving deception to capture attacker tradecraft, and dynamically mutating the live attack surface to invalidate all adversary reconnaissance in real-time.*
 
-Powered by **OpenAI (GPT-4)** and **OpenSearch**, it uses a **Dual-Index RAG** strategy to correlate real-time attacks with both external expert knowledge (MITRE/AIDEFEND) and internal historical incidents.
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Executive Summary](#-executive-summary)
+- [The Active Defense Triad](#-the-active-defense-triad)
+  - [Phase 1 — Predict](#-phase-1--predict-topology-aware-attack-path-prediction)
+  - [Phase 2 — Deceive](#-phase-2--deceive-self-evolving-dynamic-honeypots)
+  - [Phase 3 — Mutate](#-phase-3--mutate-moving-target-defense)
+- [System Architecture](#-system-architecture)
+- [Core Platform Capabilities](#-core-platform-capabilities)
+- [Quick Start](#-quick-start)
+- [Usage & Operations](#-usage--operations)
+- [The APT Kill Chain Demo](#-the-apt-kill-chain-demo)
+- [Configuration Reference](#-configuration-reference)
+- [Tech Stack](#-tech-stack)
+- [Testing & CI/CD](#-testing--cicd)
+- [License & Acknowledgments](#-license--acknowledgments)
+
+---
+
+## 🎯 Executive Summary
+
+Traditional SOC platforms are **fundamentally reactive**. They wait for an attacker to breach the perimeter, then scramble to detect, triage, and contain. By the time an analyst reviews the alert, the adversary has already pivoted, exfiltrated, and covered their tracks.
+
+**NeoVigil inverts this paradigm.**
+
+Instead of waiting for the breach, NeoVigil builds an **Active Adversarial Architecture** that forces the attacker into a losing position at every stage of the kill chain:
+
+| Traditional SOC | NeoVigil Active Defense |
+|:---|:---|
+| Detects attacks **after** they happen | **Predicts** the next 3 steps before they occur |
+| Static, predictable infrastructure | **Mutates** the attack surface in real-time |
+| Relies on known signatures | **Captures** novel zero-day tradecraft from live attackers |
+| Manual triage, alert fatigue | **Autonomous** response with RBAC guardrails |
+| Intelligence is external, stale | **Self-evolving** — every capture makes the system smarter |
+
+The result is a **closed-loop defense system** where:
+1. **Phase 1** predicts the attacker's next move,
+2. **Phase 2** places a trap exactly where the attacker is going,
+3. **Phase 2** captures the attacker's tools and feeds them back into Phase 1,
+4. **Phase 3** mutates the real infrastructure so the attacker's reconnaissance becomes worthless.
+
+> *"The supreme art of war is to subdue the enemy without fighting."* — Sun Tzu
+
+---
+
+## 🔺 The Active Defense Triad
 
 <div align="center">
-  <img src="./images/AI-SOC.png" alt="AI-Powered SOC Architecture with Triple Input Strategy" width="800">
+  <img src="./images/AI-SOC.png" alt="NeoVigil Active Defense Triad Architecture" width="800">
   <br>
-  <em>Figure: AI-Powered SOC Architecture with Triple Input Strategy.</em>
+  <em>NeoVigil's Active Adversarial Architecture: Predict → Deceive → Mutate</em>
 </div>
+
+---
+
+### ⚡ Phase 1 — PREDICT: Topology-Aware Attack Path Prediction
+
+> *"If you know the enemy and know yourself, you need not fear the result of a hundred battles."*
+
+Phase 1 transforms NeoVigil from a detection engine into a **prediction engine**. Using a Red Team LLM persona called **REDSPEC** (Red-team Speculative Prediction Engine for Cyber-attacks), the system analyzes every high-severity alert and predicts the attacker's next 3 kill chain steps.
+
+#### How It Works
+
+```
+High-Severity Alert → RAG Context Retrieval → Network Topology Graph
+        ↓                     ↓                        ↓
+    REDSPEC LLM ← combines all three signals → Predicted Kill Chain
+        ↓
+   3-Step Attack Path with per-step confidence scores
+        ↓
+   Risk ≥ 70 → Deploy Honeypot (Phase 2)
+   Risk ≥ 85 → Trigger MTD (Phase 3)
+```
+
+#### Key Capabilities
+
+| Capability | Detail |
+|:---|:---|
+| **REDSPEC Persona** | GPT-4 as a Red Team operator predicting lateral movement, privilege escalation, and data exfiltration paths |
+| **Topology-Aware** | Ingests network graph (subnets, ACLs, trust zones) so predictions follow real network paths |
+| **CMDB-Enriched** | Correlates asset criticality (Critical/High/Medium/Low) to prioritize predictions |
+| **RAG-Augmented** | Retrieves historical attack patterns from the vector knowledge base for grounded predictions |
+| **Multi-Tenant** | Predictions are partitioned by `tenant_id` for full data isolation |
+| **Zero-Log Prediction** | Novel capability: predicts attack paths even when no prior alerts exist for a new tenant |
+
+#### Output: Predictive Threat Map
+
+The Streamlit dashboard renders predictions as an interactive **🎯 Predictive Threat Map** showing:
+- Source host (compromised)
+- Predicted kill chain arrows with per-step confidence
+- Destination hosts with criticality halos
+- Risk score heat coloring
+
+---
+
+### 🍯 Phase 2 — DECEIVE: Self-Evolving Dynamic Honeypots
+
+> *"Appear weak when you are strong, and strong when you are weak."*
+
+Phase 2 closes the loop. When Phase 1 predicts an attack path, Phase 2 automatically deploys a **honeypot on the predicted path** — a realistic decoy service that looks just like the real target but is an instrumented trap.
+
+#### How It Works
+
+```
+Phase 1 Prediction (risk ≥ 70)
+        ↓
+   Decoy Manager → Selects template matching predicted service
+        ↓
+   Docker API → Deploys honeypot container on isolated network
+        ↓
+   Fluent Bit Sidecar → Streams all interaction telemetry
+        ↓
+   Validation Engine → Compares actual attacker behavior vs. prediction
+        ↓
+   RAG Feedback → Captured techniques indexed to knowledge base
+        ↓
+   Phase 1 retrieves captures for future predictions → SYSTEM GETS SMARTER
+```
+
+#### Key Capabilities
+
+| Capability | Detail |
+|:---|:---|
+| **8 Service Templates** | SSH, SMB, RDP, HTTP, HTTPS, PostgreSQL, MySQL, LDAP — each with realistic banners and behaviors |
+| **3 Fidelity Tiers** | LOW (banner-only), MEDIUM (partial protocol), HIGH (full service emulation) |
+| **Tombstone TTL** | Honeypots auto-destroy after configurable TTL (default: 4h) to prevent sprawl |
+| **Prediction Validation** | Compares predicted techniques against actual attacker TTPs — measures Phase 1 accuracy |
+| **Zero-Day Detection** | Novel payloads (hash never seen before) are flagged for Tier 2+ analyst review |
+| **RAG Feedback Loop** | Every capture is indexed back into `security-logs-knn`, making REDSPEC smarter |
+
+#### The Self-Evolution Loop
+
+```
+Phase 1 predicts attack → Honeypot deployed on path
+     ↑                           ↓
+System gets smarter     Attacker hits honeypot
+     ↑                           ↓
+RAG indexes capture ← Validation Engine processes telemetry
+```
+
+This is not a static system. **Every attacker that touches NeoVigil makes it harder for the next one.**
+
+---
+
+### 🔄 Phase 3 — MUTATE: Moving Target Defense
+
+> *"The attack surface the adversary mapped yesterday no longer exists today."*
+
+Phase 3 is the final piece of the triad. When the MTD composite threat score reaches critical thresholds, NeoVigil **dynamically alters the live production infrastructure** — spoofing server fingerprints and performing zero-downtime container migrations — so that all attacker reconnaissance becomes instantly invalid.
+
+#### How It Works
+
+```
+Trigger Sources:
+  • Phase 1: prediction risk ≥ 85
+  • Phase 2: validated honeypot capture
+  • Scanner detection: repeated probes from same IP
+  • Manual: analyst-initiated
+
+        ↓ mtd_action_queue
+
+   MTD Controller → Gathers multi-signal intelligence
+        ↓
+   Composite Score = 40% prediction risk
+                   + 30% honeypot captures
+                   + 20% scanner frequency
+                   + 10% asset criticality
+        ↓
+   Score ≥ 60 → Obfuscation (auto-approved)
+   Score ≥ 75 → Migration proposed (Tier2 approval)
+   Score ≥ 85 → Migration executed (Tier2 approval)
+```
+
+#### Key Capabilities
+
+| Capability | Detail |
+|:---|:---|
+| **Nginx/OpenResty Obfuscation** | Lua-powered per-IP header spoofing — scanners see Apache when you run Nginx, IIS when you run Node.js |
+| **6 Spoof Profiles** | Apache/PHP, IIS/ASP.NET, LiteSpeed, CloudFlare, Caddy, Custom — randomly selected per scanner |
+| **Blue/Green Migration** | 4-phase zero-downtime container migration: Clone → Start Green → Drain → Swap |
+| **Rollback Snapshots** | Every migration is reversible within configurable TTL (default: 4h) |
+| **Post-Migration Honeypot** | After migration, the old container is automatically converted into a honeypot |
+| **RBAC Approval Gates** | Obfuscation: auto-approved. Migration: Tier2+ required. Emergency lockdown: Admin required |
+| **Approval Timeout Escalation** | Unapproved actions escalate after 15min (configurable) |
+| **Immutable Audit Trail** | Every action — propose, approve, reject, execute, rollback — logged to `mtd-audit-log` |
 
 ---
 
 ## 🏗️ System Architecture
 
-The system utilizes a decoupled microservices architecture for maximum scalability and resilience:
+NeoVigil is composed of **17 microservices** orchestrated via Docker Compose:
 
 ```mermaid
-graph TD
+graph TB
     subgraph "Ingestion Layer"
-        A[Log Sources] -->|Tail/Syslog| B(Fluent Bit)
-        C[RSS Feeds] -->|Crawl| D(RSS Crawler)
-        E[Manual Upload] -->|Monitor| F(Master Node)
+        LOG[Log Sources] -->|Tail/Syslog| FB(Fluent Bit)
+        RSS[RSS/OSINT Feeds] -->|Crawl| IC(Intelligence Crawler)
+        MAN[Manual Upload] -->|Monitor| MASTER(Pipeline Master)
     end
 
-    subgraph "Buffering & Routing"
-        B -->|JSON Stream| G{"RabbitMQ Exchange"}
-        D -->|File Path| G
-        F -->|File Path| G
+    subgraph "Message Bus"
+        FB & IC & MASTER -->|JSON| RMQ{RabbitMQ}
     end
 
-    subgraph "AI Processing Core (Worker)"
-        G --> H[Hybrid Python Worker]
-        H <-->|Context Retrieval| I[("OpenSearch: Knowledge Base")]
-        H <-->|History Check| J[("OpenSearch: CTI Reports")]
-        H <-->|Analysis| K[OpenAI GPT-4]
+    subgraph "AI Processing Core"
+        RMQ --> WORKER[Pipeline Worker]
+        WORKER <-->|RAG| OSEARCH[(OpenSearch<br>Vector KNN)]
+        WORKER <-->|Analysis| LLM[GPT-4 / Local LLM]
     end
 
-    subgraph "Storage & Response"
-        H -->|Archive| L["Local Storage (Processed)"]
-        H -->|Index| J
-        H -->|Alert| M[("OpenSearch: SOC Logs")]
-        H -->|Generate| N["STIX 2.1 Bundle / PDF"]
+    subgraph "Phase 1: PREDICT"
+        RMQ --> AE[Adversarial Engine]
+        AE <-->|REDSPEC| LLM
+        AE <-->|Topology| TOPO[Network Graph]
+        AE -->|risk ≥ 70| DDQ[decoy_deploy_tasks]
+        AE -->|risk ≥ 85| MTQ[mtd_action_queue]
+    end
+
+    subgraph "Phase 2: DECEIVE"
+        DDQ --> DM[Decoy Manager]
+        DM -->|Docker API| HONEY[Honeypot Container]
+        HONEY -->|Telemetry| FBSIDE[Fluent Bit Sidecar]
+        FBSIDE --> SOAR[SOAR Server]
+        SOAR --> HPQ[honeypot_events]
+        HPQ --> VE[Validation Engine]
+        VE -->|RAG feedback| OSEARCH
+        VE -->|MTD trigger| MTQ
+    end
+
+    subgraph "Phase 3: MUTATE"
+        MTQ --> MTDC[MTD Controller]
+        MTDC -->|Score ≥ 60| OBFENG[Obfuscation Engine]
+        OBFENG --> PROXY[MTD Proxy<br>OpenResty + Lua]
+        MTDC -->|Score ≥ 85| MIGENG[Migration Engine]
+        MIGENG -->|Docker API| BLUEGREEN[Blue/Green Swap]
+        MTDC -->|Approval Queue| ANALYST[Analyst Dashboard]
+        MTDC -->|Audit| AUDITLOG[(mtd-audit-log)]
+    end
+
+    subgraph "Visualization"
+        OSEARCH --> UI[Streamlit Dashboard]
+        UI --> SOC[SOC Monitor]
+        UI --> TMAP[Threat Map]
+        UI --> PTMAP[Predictive Map]
+        UI --> MTDDASH[MTD Dashboard]
     end
 ```
 
----
+### Service Inventory
 
-## ✨ Key Features
-
-### 1. Hybrid Data Ingestion (The "Double-Barreled" Engine)
-* **⚡ Streaming Mode (Real-Time):**
-    * Powered by **Fluent Bit**.
-    * Ingests logs directly from servers (Syslog/Tail/TCP).
-    * Performs pre-normalization (JSON Parsing) at the edge.
-    * **Zero-Disk Footprint**: Logs flow directly from RAM to Queue to AI.
-* **📂 File Mode (Batch/Static):**
-    * Powered by **Master Node**.
-    * Watches `data/input/` for manual dumps or RSS crawler outputs.
-    * Handles heavy file reading and archiving logic.
-    * **Data Sources**: Integrated feeds from **BleepingComputer**, **TheHackerNews**, and **OTX AlienVault** for comprehensive coverage.
-
-### 2. Dual-Layer RAG (Retrieval-Augmented Generation)
-Unlike standard RAG, this system queries two distinct indices to build context:
-1.  **📚 Expert Knowledge Base**: Queries **MITRE ATT&CK** and **AI Defense Framework** to understand *what* the attack is and *how* to mitigate it.
-2.  **🗄️ Internal History**: Queries **CTI Reports** to see if this specific threat has been seen in your organization before (Similarity Search).
-
-### 3. Enterprise-Grade Resilience & Governance
-* **Auto-Healing**: Workers utilize RabbitMQ acknowledgments (`ack`) to ensure no log is lost, even if the AI service crashes.
-* **Auto-Maintenance**: Built-in schedulers perform daily "Disk Cleanup" (Retention Policy) and automated "Knowledge Base Updates" from GitHub.
-* **Cost-Effective**: Implements a "Confidence Threshold" (<40%) to filter out noise before expensive PDF generation.
-
-### 4. Automated Output
-* **STIX 2.1 Bundles**: Generates industry-standard threat intelligence packages.
-* **Executive PDF Reports**: Creates downloadable reports with Summary, IOCs, and AI-Suggested Mitigation Strategies.
-* **PII Masking**: Automatically redacts IPs/Emails before sending data to LLMs.
-
-### 5. Context-Aware Enrichment
-* **GeoIP Integration**: Automatically resolves attacker locations (Latitude/Longitude/Country) for visual threat mapping.
-* **Internal Asset Correlation (CMDB)**: Integrates with internal Asset Databases (CMDB) to identify target server roles, departments (e.g., IT, R&D), and criticality levels (CRITICAL/HIGH/LOW).
-* **Dynamic Severity Scoring**: Automatically boosts alert priority when attacks target critical business infrastructure (e.g., Production Web Servers).
-
-### 6. Advanced Optimizations (Performance & Resilience)
-* **🚀 API Caching**: Reduces API calls to NVD/GeoIP by 90% using `lru_cache`, ensuring instant response for recurring threats.
-* **🛡️ Absolute Whitelist**: Protects critical infrastructure (e.g., 8.8.8.8, Gateway IPs) from accidental AI blocking.
-* **⚡ Keyword Triage**: A lightweight pre-filter drops 99% of benign logs before they reach the expensive LLM, drastically reducing costs.
-* **📥 Dead-Letter Queue (DLQ)**: Failed tasks are auto-saved to `data/failed_tasks/` instead of being lost, ensuring 100% data reliability.
-* **🧠 Human Feedback Loop**: AI learns from your feedback! When you "Reject" a report with a reason, the system memorizes it to avoid repeating the same mistake.
-
-### 7. Intelligent Remediation Engine 🛡️
-* **Attack Prioritization**: Automatically prioritizes alerts based on CVE severity or Attack Type (e.g., SQL Injection, XSS).
-* **CVE-First Strategy**: If a CVE is detected, the engine immediately fetches relevant playbooks and patches.
-* **Interactive Playbooks**: Dynamic Mermaid diagrams guide analysts through step-by-step mitigation.
-* **Split-View Dashboard**: "Enriched Alerts Dashboard" provides a side-by-side view of active threats and their corresponding remediation plans.
-
-### 8. Real-Time System Monitoring 📊
-* **Resource Tracking**: Live CPU and Memory usage displayed directly in the dashboard sidebar using `psutil`.
-* **Process Health**: Monitors critical processes to ensure stability.
-
-### 9. Proactive Defense Controls & Compliance Framework 🏢🔒
-Newly implemented features for production environments (ISO 27001 / SOC 2 Ready):
-
-* **🚧 SOAR Guardrails**: 
-    * **Critical Asset Protection**: Prevents automated blocking of internal subnets (`10.0.0.0/8`, `192.168.0.0/16`).
-    * **Human-in-the-Loop**: High-risk internal alerts are automatically downgraded to "Pending Manual Approval".
-* **📜 Audit Trail & Rollback**:
-    * **Immutable Logging**: All analyst actions (Approve/Reject/Rollback) are logged to a tamper-proof OpenSearch index (`soc-audit-logs`).
-    * **One-Click Rollback**: Instantly revert accidental IP blocks via the UI, recovering service availability in seconds.
-* **🛡️ Privacy Shield (Local LLM Enforcement)**:
-    * **Strict Mode**: Enforces `USE_LOCAL_LLM=true` to prevent sensitive data from leaving the premise.
-    * **Cloud Block**: Automatically detects and blocks any fallback attempts to OpenAI/Azure if the local model fails.
-    * **DLQ Routing**: Failed tasks are routed to a specialized Dead Letter Queue (`data/failed_tasks/privacy_blocked`) for forensic review.
-* **🏗️ High Availability (HA)**:
-    * **Resilient Architecture**: Worker nodes automatically recover from RabbitMQ broker outages (verified via Chaos Engineering).
-    * **Scalability**: Docker Compose configuration supports horizontal scaling of worker nodes.
-
-### 10. Enterprise DevOps & Multi-Tenancy (New) 🚀
-* **🏢 Multi-Tenancy Support**:
-    * **Data Isolation**: All OpenSearch indices (`security-logs-knn`, `cti-reports`) are partitioned by `tenant_id`.
-    * **Tenant Views**: Dashboard supports filtering views by specific tenants (e.g., `tenant_alpha`).
-* **🔄 CI/CD Pipeline (GitHub Actions)**:
-    * **Automated Testing**: On every push, the system runs Unit, Smoke, and E2E tests.
-    * **Staging Environment**: Uses `docker-compose.staging.yml` with a **Mock LLM** to simulate AI responses without API costs.
-    * **Quality Gates**: Enforces `flake8` syntax checks and reachability tests before merge.
-* **🛠️ Standardized Engineering**:
-    * **Makefile**: Unified commands (`make unit`, `make e2e`) for local and CI execution.
-    * **Type Safety & Linting**: Codebase standardized for Python 3.9+ type hinting.
-
-
-| File Prefix | Source Type | Processing Mode | PDF Report | Primary Purpose |
-| :--- | :--- | :--- | :--- | :--- |
-| **`RSS_`** | Intelligence Feed | **Silent Ingestion** | JSON Only | Silently populates the knowledge base without generating noise. |
-| **`LOG_`** | Threat Detection | **Correlation** | **Conditional** | Generates a PDF alert **ONLY** when logs match known threats. |
-| **`Manual`** | Deep Analysis | **Full Investigation** | Always | Provides comprehensive analysis and archiving for specific cases. |
-
-### 📊 Visualization & Storage
-- **OpenSearch Integration**: Real-time indexing of all intelligence for lightning-fast searching and TTP mapping.
-- **Dashboards**: Visualize attack trends, top threat actors, and active alerts via OpenSearch Dashboards.
-- **Automated Reporting**: Generates executive-ready PDF reports summarizing IOCs, TTPs, and confidence scores.
+| # | Service | Purpose | Phase |
+|:-:|:---|:---|:-:|
+| 1 | `opensearch-node` | Vector search, KNN, telemetry indexing | Core |
+| 2 | `opensearch-dashboards` | Data exploration & visualization | Core |
+| 3 | `rabbitmq` | Message bus (9 queues) | Core |
+| 4 | `fluent-bit` | Real-time log streaming | Core |
+| 5 | `soar-server` | Alert relay & honeypot telemetry bridge | Core |
+| 6 | `log-generator` | Simulated log source | Core |
+| 7 | `setup-worker` | Index initialization | Core |
+| 8 | `cti-pipeline-master` | File ingestion & scheduling | Core |
+| 9 | `cti-pipeline-worker` | AI analysis (RAG + LLM) | Core |
+| 10 | `threat-hunter` | Continuous IOC scanning | Core |
+| 11 | `intelligence-crawler` | OSINT feed aggregation | Core |
+| 12 | `cti-ui` | Streamlit SOC dashboard | Core |
+| 13 | `prediction-engine` | REDSPEC attack path prediction | Phase 1 |
+| 14 | `decoy-manager` | Honeypot lifecycle orchestration | Phase 2 |
+| 15 | `validation-engine` | Prediction validation & RAG feedback | Phase 2 |
+| 16 | `mtd-controller` | MTD scoring, RBAC, action dispatch | Phase 3 |
+| 17 | `mtd-proxy` | OpenResty with Lua obfuscation | Phase 3 |
 
 ---
 
-## 🚀 Installation
+## 🛠️ Core Platform Capabilities
 
-### 1. Prerequisites
+Beyond the Active Defense Triad, NeoVigil provides a full enterprise SOC platform:
 
-Before deploying the CTI Pipeline, ensure your host machine meets the following requirements to handle the AI processing and database workloads.
-
-#### 🖥️ Hardware Requirements
-
-| Component | Minimum | Recommended | Note |
-| :--- | :--- | :--- | :--- |
-| **OS** | Linux/macOS/Windows | Linux (Ubuntu 22.04+) | Optimized for Docker containerization. |
-| **RAM** | **16 GB** | **32 GB** | OpenSearch and AI Workers are memory-intensive. **8GB is NOT sufficient.** |
-| **CPU** | 4 Cores | 8 Cores | Multi-core CPU helps with parallel processing of Workers. |
-| **Disk** | 20 GB Free | 50 GB Free | For storing Docker images and OpenSearch indices. |
-
-
-#### 🛠️ Software Requirements
-
-* **Docker Engine**: v24.0+
-* **Docker Compose**: v2.20+
-* **Python**: 3.9+ (For local development scripts)
+- **Dual-Layer RAG** — Queries both the MITRE/AIDEFEND expert knowledge base and internal historical CTI reports for grounded AI analysis
+- **STIX 2.1 Compliance** — Generates and validates industry-standard threat intelligence bundles
+- **Executive PDF Reports** — Automated report generation with IOCs, TTPs, and AI-suggested mitigations
+- **PII Masking** — Automatic redaction of IPs/emails before LLM processing
+- **GeoIP Enrichment** — Real-time attacker geolocation for threat mapping
+- **CMDB Integration** — Asset criticality scoring for dynamic alert prioritization
+- **5-Level RBAC** — Viewer → Tier 1 → Tier 2 → Admin → System Owner (ISO 27001 / SOC 2 ready)
+- **SOAR Guardrails** — Critical asset protection, human-in-the-loop for internal threats
+- **Immutable Audit Trail** — All analyst actions logged to tamper-proof indices
+- **Dead-Letter Queue** — Zero data loss; failed tasks preserved for forensic review
+- **Multi-Tenancy** — Full data isolation via `tenant_id` partitioning across all indices
+- **Privacy Shield** — Local LLM enforcement mode blocks cloud API fallback
 
 ---
 
-#### ⚠️ Performance Note regarding Memory
-The default configuration spawns **3 Worker containers**. If you are running on a machine with limited memory (< 16GB), please reduce the worker count in `docker-compose.yml` or run:
+## 🚀 Quick Start
+
+### Prerequisites
+
+| Component | Minimum | Recommended |
+|:---|:---|:---|
+| **OS** | Linux / macOS / Windows | Linux (Ubuntu 22.04+) |
+| **RAM** | 16 GB | 32 GB |
+| **CPU** | 4 Cores | 8 Cores |
+| **Disk** | 20 GB free | 50 GB free |
+| **Docker Engine** | v24.0+ | Latest |
+| **Docker Compose** | v2.20+ | Latest |
+| **Python** | 3.9+ | 3.10+ |
+
+### 1. Clone & Configure
 
 ```bash
-docker compose up -d --scale cti-pipeline-worker=1
-```
-
-### 2. Configuration
-Clone the repository and set up your environment variables.
-
-```bash
-# Clone the repository
 git clone https://github.com/uuluul/AI-powered-autonomous-SOC.git
-cd ai-powered-autonomous-soc
+cd AI-powered-autonomous-SOC
 
-# Create environment file
 cp .env.example .env
 ```
-Edit the .env file to configure your LLM provider. The system supports both Standard OpenAI and Azure OpenAI.
 
-#### Option A: Standard OpenAI
+Edit `.env` with your LLM provider credentials:
+
 ```bash
+# Option A: Standard OpenAI
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxx
 OPENAI_MODEL=gpt-4o
-```
-#### Option B: Azure OpenAI
-```bash
+
+# Option B: Azure OpenAI
 AZURE_OPENAI_API_KEY=your_azure_key
-AZURE_OPENAI_ENDPOINT=(https://your-resource.openai.azure.com/)
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4o
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
-### 3. Launch System
-Start all services (Pipeline, Hunter, OpenSearch, Fluent Bit, Dashboards) with a single command:
+
+### 2. Launch NeoVigil
+
 ```bash
 docker compose up -d --build
 ```
 
-### 4. Initialize Knowledge Base (First Time Only)
-You must populate the RAG database with MITRE ATT&CK and AIDEFEND data for the AI analysis to work correctly.
+This starts all 17 services. On machines with < 16 GB RAM:
+
+```bash
+docker compose up -d --build --scale cti-pipeline-worker=1
+```
+
+### 3. Initialize Knowledge Base (First Run Only)
+
 ```bash
 docker compose exec cti-pipeline-master python /app/src/setup_knowledge_base.py
 ```
-Wait for the message:  MITRE Import Completed/AIDEFEND Import Completed
 
-## 📖 Usage Workflow
+Wait for: `✅ MITRE Import Completed` / `✅ AIDEFEND Import Completed`
 
-### Step 1: Automated Collection
-The **RSS Crawler** runs in the background, fetching the latest cybersecurity news. You can also manually drop files into `data/input/`.
+### 4. Access the Dashboard
 
-**To force a crawl immediately (for testing):**
+Open **[http://localhost:8501](http://localhost:8501)** and log in with `admin / admin`.
+
+---
+
+## 📖 Usage & Operations
+
+### SOC Dashboard Pages
+
+| Page | Description |
+|:---|:---|
+| 🚨 **Internal Threat Monitor** | Real-time SOC alerts with severity filtering |
+| 📈 **Enriched Alerts Dashboard** | Threat map, geolocation, remediation playbooks |
+| 🕸️ **Threat Graph** | Visual network topology with attack overlays |
+| 📚 **Knowledge Base** | Historical CTI reports, PDF downloads |
+| 🔍 **CTI Report Review** | AI analysis approval/rejection workflow |
+| 📜 **Audit & Compliance** | Immutable action log (ISO 27001 / SOC 2) |
+| 🎯 **Predictive Threat Map** | Phase 1 attack path predictions |
+| 🛡️ **Moving Target Defense** | Phase 3 obfuscation rules, approvals, migrations, audit |
+
+### Operational Workflows
+
+**Automated Collection** — Intelligence crawlers continuously fetch from BleepingComputer, TheHackerNews, and OTX AlienVault.
+
+**Threat Hunting** — The hunter module runs 24/7, scanning internal logs against approved IOCs. Matches generate automatic alerts.
+
+**Predictive Defense** — High-severity alerts trigger REDSPEC predictions. Risk ≥ 70 deploys decoys. Risk ≥ 85 triggers MTD evaluation.
+
+**MTD Approval** — Migration proposals appear in the 🛡️ MTD dashboard. Tier 2+ analysts approve or reject within the configurable timeout window (default: 15 min).
+
+---
+
+## 🎬 The APT Kill Chain Demo
+
+NeoVigil ships with `simulate_apt_killchain.py` — a cinematic, color-coded terminal script that demonstrates the full Active Defense Triad in real-time.
+
 ```bash
-docker compose exec rss-crawler python src/rss_crawler.py
-```
-### Step 2: CTI Review & Approval
-Access the **Analyst Workbench** to review AI findings.
-
-1.  Open Browser: **[http://localhost:8501](http://localhost:8501)**
-- **Login: Use default credentials admin / admin.**
-2.  Navigate to **"🔍 CTI Report Review"** in the sidebar.
-3.  Select a pending report.
-4.  (Optional) Edit the JSON analysis if needed.
-5.  Click **"✅ Approve & Generate PDF"**.
-    * *System Action: Generates a PDF report, indexes the IOCs to OpenSearch, and updates the Knowledge Base.*
-
-### Step 3: Threat Hunting (Automated & Simulation)
-The **Threat Hunter** module runs in the background (24/7), continuously scanning your internal logs for IOCs found in approved reports.
-
-* **Real-World Scenario**: No action needed. If a real attacker matches an IOC, an alert is generated automatically.
-* **Simulation (For Demo)**: To force a detection event and visualize it on the map, use this command to inject a fake log entry that matches your approved report:
-
-```bash
-# Replace '1.2.3.4' with an IP from your report, and 'RSS_Report_Name.txt' with your filename
-docker exec -it cti-ui python -c "
-import os
-from opensearchpy import OpenSearch
-from datetime import datetime
-
-client = OpenSearch(
-    hosts=[{'host': os.getenv('OPENSEARCH_HOST', 'opensearch-node'), 'port': 9200}],
-    http_compress=True, use_ssl=False, verify_certs=False, ssl_show_warn=False
-)
-
-doc = {
-    'timestamp': datetime.now().isoformat(),
-    'source_ip': '1.2.3.4',  # CHANGE THIS to match your CTI report
-    'dest_ip': '192.168.1.100',
-    'attack_type': 'CTI Match',
-    'severity': 'Critical',
-    'threat_matched': True,
-    'filename': 'RSS_Report_Name.txt' # CHANGE THIS to match your report filename
-}
-
-try:
-    client.index(index='security-logs-knn', body=doc, refresh=True)
-    print('  Attack Simulated! Check the Dashboard.')
-except Exception as e:
-    print(f'  Error: {e}')
-"
+# Ensure NeoVigil is running, then:
+python simulate_apt_killchain.py
 ```
 
-### Step 4: SOC Visualization & Remediation
-Go to **"🚨 Enriched Alerts Dashboard"** in the UI.
-* **Live Threat Map**: Displays real-time attacks with accurate geolocation (City/Country) and "missile" visualization targeting your assets.
-* **Intelligent Remediation**: Click on an alert to see the "Remediation Playbook" panel on the right.
-    * **Playbooks**: View step-by-step mitigation guides (e.g., Block IP, Patch CVE, Isolate Host) rendered as interactive diagrams.
-    * **Actionable Insights**: Immediate context on the attack vector (SQLi, DDoS, Brute Force).
-* **System Health**: Monitor CPU/RAM usage in real-time on the sidebar.
+The script simulates a full APT kill chain:
 
-### Step 5: Knowledge Management
-Go to **"📚 Knowledge Base"** to:
-* Browse all historical intelligence reports.
-* **Download PDF**: Click the download button to get the full executive report including Mitigation Strategies and MITRE TTPs.
+1. **Phase 1 (Predict)** — Injects a Log4Shell initial access event → forces REDSPEC to predict the kill chain
+2. **Phase 2 (Deceive)** — Simulates the attacker hitting the predicted honeypot → triggers validation & RAG feedback
+3. **Phase 3 (Mutate)** — Floods scanner probes → pushes MTD score ≥ 85 → triggers obfuscation + migration proposal
 
-## 🔧 Advanced Configuration
+---
 
-You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. Note that these changes require a container restart.
+## ⚙️ Configuration Reference
 
 | Variable | Default | Description |
-| :--- | :--- | :--- |
-| `RETENTION_DAYS` | `30` | Number of days to keep files in `processed/`. |
-| `CONFIDENCE_THRESHOLD` | `80` | Minimum score to trigger a PDF/Blocking alert. |
-| `RAG_TOP_K` | `3` | Number of similar past cases to retrieve. |
-| `MAX_REPORTS_LIMIT` | `200` | Maximum number of reports to fetch for Knowledge Base. |
+|:---|:---|:---|
+| `RETENTION_DAYS` | `30` | Days to keep processed files |
+| `CONFIDENCE_THRESHOLD` | `80` | Minimum score for PDF/blocking alert |
+| `RAG_TOP_K` | `3` | Similar past cases to retrieve |
+| `MAX_ACTIVE_DECOYS` | `10` | Maximum concurrent honeypots |
+| `DECOY_TTL_HOURS` | `4` | Honeypot auto-destroy timer |
+| `MTD_APPROVAL_TIMEOUT` | `15` | Minutes before unapproved actions escalate |
+| `MTD_DRAIN_TIMEOUT` | `30` | Seconds to drain connections during migration |
+| `MTD_ROLLBACK_HOURS` | `4` | Hours a migration remains rollback-eligible |
 
+---
 
 ## 🛠️ Tech Stack
 
-* **Language: Python 3.9**
-* **AI/LLM: GPT-4o, LangChain (RAG Logic)**
-* **Database: OpenSearch (Vector Search/Lucene), SQLite (Task Queue)**
-* **Log Collection: Fluent Bit**
-* **Data Standard: STIX 2.1 JSON**
-* **Infrastructure: Docker & Docker Compose**
-* **Frontend: Streamlit, PyDeck (3D Maps), Plotly, Mermaid.js**
-* **Monitoring: psutil (System Resources)**
+| Layer | Technology |
+|:---|:---|
+| **Language** | Python 3.10+ |
+| **AI/LLM** | GPT-4o, LangChain (RAG), REDSPEC (adversarial persona) |
+| **Search & Vector DB** | OpenSearch (KNN, Vector Search, Lucene) |
+| **Message Bus** | RabbitMQ (9 queues, durable, DLQ) |
+| **Log Ingestion** | Fluent Bit (streaming), RSS/OTX crawlers (batch) |
+| **Deception** | Docker SDK (container orchestration), Fluent Bit sidecars |
+| **MTD Proxy** | OpenResty (Nginx + Lua) |
+| **Container Orchestration** | Docker & Docker Compose (17 services) |
+| **Frontend** | Streamlit, PyDeck (3D maps), Plotly, Mermaid.js |
+| **Data Standards** | STIX 2.1, MITRE ATT&CK, AIDEFEND |
+| **Testing** | Pytest, Chaos Engineering, GitHub Actions CI/CD |
 
-* **Testing: Pytest (Unit/Integration), Chaos Engineering (Resilience)**
+---
 
-## 🧪 Testing & Development
-This repository includes a standardized testing framework using `pytest` and `Makefile`.
+## 🧪 Testing & CI/CD
 
-### 1. Run Tests
 ```bash
-# Run all tests (Unit, Smoke, E2E)
+# Run all tests
 make test
 
-# Run specific suites
-make unit    # Syntax & Logic checks
-make smoke   # Container connectivity (RabbitMQ/OpenSearch)
-make e2e     # Full Pipeline verification (Log -> AI -> DB)
+# Specific suites
+make unit    # Syntax & logic
+make smoke   # Container connectivity
+make e2e     # Full pipeline verification
 ```
 
-### 2. Staging Environment
-For integration testing without OpenAI costs, use the Staging environment which includes a **Mock LLM**.
+### Staging Environment (No API Costs)
+
 ```bash
 docker compose -f docker-compose.staging.yml up -d --build
 ```
-* **Mock LLM**: Simulates GPT-4 responses locally on port `8000`.
-* **Lightweight**: Excludes UI and Visualization containers to save resources.
+
+Uses a **Mock LLM** on port 8000 to simulate GPT-4 responses locally.
+
+---
 
 ## 📜 License & Acknowledgments
 
-This project is licensed under the MIT License.
+This project is licensed under the **MIT License**.
 
-### Framework Integration & Attributions
+### Framework Attributions
 
-This project incorporates data and concepts from the following open-source frameworks:
+- **[MITRE ATT&CK®](https://attack.mitre.org/)** — Adversary tactics & technique mapping
+- **[STIX™ 2.1](https://oasis-open.github.io/cti-documentation/)** — OASIS Open Standard for threat intelligence
+- **[AIDEFEND](https://github.com/edward-playground/aidefense-framework)** — AI Defense Framework by Edward Lee (CC BY 4.0)
+- **[OASIS stix2-validator](https://github.com/oasis-open/cti-stix-validator)** — STIX 2.1 compliance validation
 
-* **STIX™ (Structured Threat Information Expression)**:
-    * **Standard**: STIX 2.1 (OASIS Open Standard)
-    * **Documentation**: [OASIS CTI Documentation](https://oasis-open.github.io/cti-documentation/)
-    * *Adheres to international standards for representing and sharing cyber threat intelligence in a structured format.*
+---
 
-* **AIDEFEND (AI Defense Framework)**:
-    * **Creator**: Edward Lee
-    * **Source**: [edward-playground/aidefense-framework](https://github.com/edward-playground/aidefense-framework)
-    * **License**: Creative Commons Attribution 4.0 International (CC BY 4.0).
-    * *Utilize the AIDEFEND knowledge base to provide AI-specific defensive countermeasures in the RAG pipeline.*
+<div align="center">
 
-* **MITRE ATT&CK®**:
-    * **Source**: [The MITRE Corporation](https://attack.mitre.org/)
-    * *Used for mapping adversary tactics and techniques.*
+**NeoVigil** — *Predict. Deceive. Mutate.*
 
-* **OASIS Open stix2-validator**:
-    * **Source**: [oasis-open/cti-stix-validator](https://github.com/oasis-open/cti-stix-validator)
-    * *Used for ensuring the integrity and compliance of generated JSON bundles with the STIX 2.1 specification.*
+*Built for defenders who refuse to play catch-up.*
+
+</div>

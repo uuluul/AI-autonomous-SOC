@@ -20,3 +20,4 @@ pyyaml
 selenium 
 webdriver-manager
 OTXv2>=1.5.12
+docker>=7.0.0

@@ -761,6 +761,38 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             upload_to_os_lib(soc_doc, f"log_{report_id}", "security-logs-knn")
             logger.info(f"  Synced to SOC Dashboard (security-logs-knn)")
 
+            # ─── Phase 1: Trigger Adversarial Attack-Path Prediction ───
+            # Fire-and-forget: prediction failure must NEVER block the main pipeline
+            try:
+                prediction_payload = {
+                    "trigger_type": "alert",
+                    "alert_id": f"log_{report_id}",
+                    "source_ip": soc_doc.get("source_ip", "Unknown"),
+                    "target_ip": soc_doc.get("source_ip"),
+                    "attack_type": soc_doc.get("attack_type", "Unknown"),
+                    "summary": extracted.get("summary", ""),
+                    "message": raw_content[:500] if raw_content else "",
+                    "mitre_tactic": extracted.get("mitre_tactic", "Initial Access"),
+                    "tenant_id": task_payload.get("tenant_id", "default"),
+                    "timestamp": datetime.now().isoformat(),
+                    "confidence": confidence,
+                }
+                pred_conn = pika.BlockingConnection(
+                    pika.ConnectionParameters(host=RABBITMQ_HOST, connection_attempts=2, retry_delay=1)
+                )
+                pred_ch = pred_conn.channel()
+                pred_ch.queue_declare(queue="prediction_tasks", durable=True)
+                pred_ch.basic_publish(
+                    exchange="",
+                    routing_key="prediction_tasks",
+                    body=json.dumps(prediction_payload),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+                pred_conn.close()
+                logger.info(f"  🎯 Prediction task dispatched for alert log_{report_id}")
+            except Exception as pred_exc:
+                logger.warning(f"  ⚠️ Failed to dispatch prediction (non-critical): {pred_exc}")
+
     # 3. 噪音過濾 / 低信心 Log
     elif is_log and confidence < 40 and not force_human_review:
         logger.info(f"  Low confidence Log ({confidence}%). Archiving.")

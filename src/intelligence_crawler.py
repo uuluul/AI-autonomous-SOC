@@ -7,6 +7,7 @@ import re
 import hashlib
 import json
 import requests
+import pika
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
@@ -81,6 +82,60 @@ def save_to_input_folder(source_name, title, content):
     
     logger.info(f"  Successfully saved CTI: [{source_name}] {title[:30]}... -> {filepath}")
 
+# ================= Phase 1: Zero-Log Event Emission =================
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+
+_URGENCY_KEYWORDS = [
+    "actively exploited", "in the wild", "zero-day", "0-day",
+    "critical vulnerability", "emergency patch", "mass exploitation",
+    "remote code execution", "pre-auth", "unauthenticated",
+]
+
+def _emit_zero_log_event(title: str, content: str, source: str = "crawler"):
+    """
+    If the crawled article mentions a CVE with urgency keywords,
+    publish a zero_log_event so the Adversarial Engine can cross-
+    reference against local assets — even with ZERO local logs.
+    """
+    cves = re.findall(r"CVE-\d{4}-\d{4,7}", content, re.IGNORECASE)
+    if not cves:
+        return
+
+    combined = (title + " " + content).lower()
+    is_urgent = any(kw in combined for kw in _URGENCY_KEYWORDS)
+    if not is_urgent:
+        return
+
+    try:
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST, connection_attempts=2, retry_delay=1
+            )
+        )
+        channel = connection.channel()
+        channel.queue_declare(queue="zero_log_events", durable=True)
+
+        for cve_id in list(set(cves))[:3]:  # Max 3 CVEs per article
+            event = {
+                "cve_id": cve_id.upper(),
+                "severity": "CRITICAL",
+                "affected_software": title,
+                "source": source,
+                "source_article": title[:200],
+                "timestamp": datetime.now().isoformat(),
+            }
+            channel.basic_publish(
+                exchange="",
+                routing_key="zero_log_events",
+                body=json.dumps(event),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+            logger.info(f"🚨 Zero-Log Event emitted: {cve_id} from '{title[:50]}...'")
+
+        connection.close()
+    except Exception as exc:
+        logger.warning(f"⚠️ Failed to emit zero-log event (non-critical): {exc}")
+
 # ================= 爬蟲 1: RSS Feeds =================
 
 def fetch_rss():
@@ -124,6 +179,7 @@ def fetch_rss():
                 
                 history.add(content_hash)
                 new_hashes_found = True
+                _emit_zero_log_event(title, content, source=source_name)
                 logger.info(f"  New RSS Report Fetched: {filename}")
                 
         except Exception as e:
@@ -249,6 +305,7 @@ def fetch_github_advisories(limit=5):
                 
                 save_to_input_folder("GITHUB", title, content)
                 saved_count += 1
+                _emit_zero_log_event(title, content, source="GitHub_Advisory")
                 
         else:
              logger.error(f"  GitHub API returned error status code: {response.status_code}")
