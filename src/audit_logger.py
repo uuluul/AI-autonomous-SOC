@@ -15,7 +15,18 @@ class AuditLogger:
     def __init__(self):
         self.index_name = "soc-audit-logs"
 
-    def log_event(self, actor: str, action: str, target: str, status: str, justification: str = "", details: dict = None):
+    def log_event(
+        self,
+        actor: str,
+        action: str,
+        target: str,
+        status: str,
+        justification: str = "",
+        details: dict = None,
+        role: str = "System_Owner",
+        tenant_id: str = "global",
+        session_id: str = "system",
+    ):
         """
         Logs an immutable audit event to OpenSearch.
         
@@ -30,9 +41,13 @@ class AuditLogger:
         doc = {
             "timestamp": datetime.now().isoformat(),
             "actor": actor,
+            "role": role,
+            "tenant_id": tenant_id,
+            "session_id": session_id,
             "action": action,
             "target": target,
             "status": status,
+            "result": status,
             "justification": justification,
             "details": details or {},
             "event_id": str(uuid.uuid4()) # Unique ID for traceability

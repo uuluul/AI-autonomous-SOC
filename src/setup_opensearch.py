@@ -79,6 +79,7 @@ def create_knn_index(client):
                 "threat_matched": {"type": "boolean"},
                 "confidence": {"type": "integer"},
                 "source_type": {"type": "keyword"},
+                "tenant_id": {"type": "keyword"},
                 "indicators": {"properties": {"ipv4": {"type": "keyword"}}}
             }
         }
@@ -97,6 +98,7 @@ def create_reports_index(client):
                 "ttps": {"type": "object"},
                 "threat_matched": {"type": "boolean"},
                 "source_type": {"type": "keyword"},
+                "tenant_id": {"type": "keyword"},
                 "related_reports": {"type": "keyword"}
                 
             }
@@ -115,6 +117,7 @@ def create_alerts_index(client):
                 "asset_department": {"type": "keyword"},
                 "asset_criticality": {"type": "keyword"},
                 "status": {"type": "keyword"},
+                "tenant_id": {"type": "keyword"},
                 "log_excerpt": {"type": "text"}
             }
         }
@@ -128,9 +131,13 @@ def create_audit_index(client):
             "properties": {
                 "timestamp": {"type": "date"},
                 "actor": {"type": "keyword"},
+                "role": {"type": "keyword"},
+                "tenant_id": {"type": "keyword"},
+                "session_id": {"type": "keyword"},
                 "action": {"type": "keyword"},
                 "target": {"type": "keyword"},
                 "status": {"type": "keyword"},
+                "result": {"type": "keyword"},
                 "justification": {"type": "text"},
                 "event_id": {"type": "keyword"},
                 "details": {"type": "object"}
@@ -194,7 +201,7 @@ def upload_to_opensearch(doc_body, doc_id=None, index_name=INDEX_CTI_REPORTS):
         logger.error(f"  Upload failed: {e}")
         return False
 
-def upsert_indicator(indicator_value, indicator_type, report_data):
+def upsert_indicator(indicator_value, indicator_type, report_data, tenant_id="tenant-alpha"):
     """
     去重邏輯：使用 MD5 作為文件 ID。
     如果指標已存在，更新 last_seen 並延長過期時間；若不存在則新增。
@@ -218,11 +225,13 @@ def upsert_indicator(indicator_value, indicator_type, report_data):
                 if (!ctx._source.related_reports.contains(params.report)) {
                     ctx._source.related_reports.add(params.report);
                 }
+                ctx._source.tenant_id = params.tenant_id;
             """,
             "params": {
                 "now": now_str,
                 "expiry": new_expiry,
-                "report": report_data.get("filename", "Unknown")
+                "report": report_data.get("filename", "Unknown"),
+                "tenant_id": tenant_id
             }
         },
         "upsert": {
@@ -232,7 +241,8 @@ def upsert_indicator(indicator_value, indicator_type, report_data):
             "last_seen": now_str,
             "expiration_date": new_expiry,
             "related_reports": [report_data.get("filename", "Unknown")],
-            "confidence": report_data.get("confidence", 50)
+            "confidence": report_data.get("confidence", 50),
+            "tenant_id": tenant_id
         }
     }
     

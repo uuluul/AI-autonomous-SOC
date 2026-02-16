@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
 RABBITMQ_QUEUE = "cti_tasks"
 ROLE = os.getenv("ROLE", "master")  # 'master' or 'worker'
+DEFAULT_TENANT_ID = os.getenv("DEFAULT_TENANT_ID", "tenant-alpha")
 
 # 資料夾設定
 INPUT_DIR = "data/input"
@@ -361,6 +362,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         # 將 JSON 物件轉回字串，因為後面的 PII Masker 和切片器吃的是字串
         raw_content = json.dumps(task_payload, ensure_ascii=False)
 
+    tenant_id = task_payload.get("tenant_id", DEFAULT_TENANT_ID)
+    session_id = task_payload.get("session_id", "system-session")
+
     # ================= PII 遮罩 (隱私保護) =================
     masker = PIIMasker()
     safe_content = masker.mask(raw_content) 
@@ -575,7 +579,10 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                     target=filename, # Use the local variable 'filename'
                     status="SUCCESS",
                     justification=f"Prevented Auto-Block on Critical IP: {ip}",
-                    details={"original_confidence": confidence}
+                    details={"original_confidence": confidence},
+                    role="System_Owner",
+                    tenant_id=tenant_id,
+                    session_id=session_id
                 )
                 
                 is_confirmed_high_risk = False
@@ -602,7 +609,8 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             "expiration_date": (datetime.now() + timedelta(days=90)).isoformat(), # Crawled data kept longer for training
             "pdf_path": None, # No PDF
             "source_type": src_type,
-            "threat_matched": threat_matched
+            "threat_matched": threat_matched,
+            "tenant_id": tenant_id
         })
         
         report_id = os.path.splitext(filename)[0]
@@ -639,9 +647,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         report_info = {"filename": filename, "confidence": confidence}
         
         for ip in indicators.get("ipv4", []):
-            upsert_indicator(ip, "ipv4", report_info)
+            upsert_indicator(ip, "ipv4", report_info, tenant_id=tenant_id)
         for domain in indicators.get("domains", []):
-            upsert_indicator(domain, "domain", report_info)
+            upsert_indicator(domain, "domain", report_info, tenant_id=tenant_id)
 
         # AUDIT LOGGING: AI BLOCKING ACTION
         audit_description = f"AI Auto-Blocked {len(indicators.get('ipv4', []))} IPs and {len(indicators.get('domains', []))} Domains. Confidence: {confidence}%"
@@ -651,7 +659,10 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             target=filename,
             status="SUCCESS",
             justification=f"High Confidence Threat ({confidence}%) matched RAG/Rules.",
-            details={"indicators": indicators, "attack_type": extracted.get("attack_type", "Unknown")}
+            details={"indicators": indicators, "attack_type": extracted.get("attack_type", "Unknown")},
+            role="System_Owner",
+            tenant_id=tenant_id,
+            session_id=session_id
         )
 
         # Indexing
@@ -664,7 +675,8 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             "expiration_date": (datetime.now() + timedelta(days=30)).isoformat(),
             "pdf_path": pdf_path,
             "source_type": src_type,
-            "threat_matched": threat_matched
+            "threat_matched": threat_matched,
+            "tenant_id": tenant_id
         })
         
         report_id = os.path.splitext(filename)[0] 
@@ -681,6 +693,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             soc_doc["attack_type"] = extracted.get("attack_type", "High Confidence Threat")
             soc_doc["severity"] = "Critical" if confidence >= 90 else "High"
             soc_doc["mitigation_status"] = "Blocked  "
+            soc_doc["tenant_id"] = tenant_id
             
             upload_to_os_lib(soc_doc, f"log_{report_id}", "security-logs-knn")
             logger.info(f"  Synced to SOC Dashboard (security-logs-knn)")
@@ -725,7 +738,8 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                 "threat_matched": True, # Keep it visible as threat
                 "attack_type": extracted.get("attack_type", "Suspicious Activity"),
                 "severity": "Medium",
-                "mitigation_status": "Pending Manual Approval ⏳"
+                "mitigation_status": "Pending Manual Approval ⏳",
+                "tenant_id": tenant_id
              })
              # Use a distinct ID to avoid overwriting if approved later (though dashboard usually filters by ID)
              report_id = os.path.splitext(filename)[0]
@@ -797,7 +811,9 @@ def run_master():
                     # 發送任務
                     task_payload = json.dumps({
                         "file_path": processing_path,
-                        "filename": filename
+                        "filename": filename,
+                        "tenant_id": DEFAULT_TENANT_ID,
+                        "session_id": f"master-{int(time.time())}"
                     })
                     
                     try:

@@ -6,6 +6,7 @@ import pandas as pd
 import pydeck as pdk
 import hashlib
 import base64
+import uuid
 from datetime import datetime, timedelta
 from streamlit_agraph import agraph, Node, Edge, Config
 import plotly.express as px
@@ -15,10 +16,8 @@ from setup_opensearch import get_opensearch_client, upload_to_opensearch
 from to_pdf import generate_pdf_report
 from utils import get_ai_remediation
 from audit_logger import AuditLogger
+from rbac import ROLES, check_permission
 import requests
-
-audit_logger = AuditLogger()
-from audit_logger import AuditLogger
 
 audit_logger = AuditLogger()
 
@@ -83,21 +82,48 @@ def check_password():
     else:
         return True
 
+
+def get_current_session_id():
+    if "session_id" not in st.session_state:
+        st.session_state["session_id"] = str(uuid.uuid4())
+    return st.session_state["session_id"]
+
+
+def get_current_role():
+    if "user_role" not in st.session_state:
+        st.session_state["user_role"] = os.getenv("DEFAULT_USER_ROLE", "Admin")
+    return st.session_state["user_role"]
+
+
+def get_current_tenant():
+    if "tenant_id" not in st.session_state:
+        st.session_state["tenant_id"] = os.getenv("DEFAULT_TENANT_ID", "tenant-alpha")
+    return st.session_state["tenant_id"]
+
+
+def deny_action(action_name):
+    st.error(f"❌ Permission denied: current role cannot perform '{action_name}'.")
+
+
 # ================= 輔助函式 =================
 
-def get_all_reports():
+def get_all_reports(tenant_id):
     """從 OpenSearch 撈取所有歷史情資 (Knowledge Base)"""
     client = get_opensearch_client()
-    query = {"size": 200, "sort": [{"timestamp": "desc"}], "query": {"match_all": {}}}
+    query = {
+        "size": 200,
+        "sort": [{"timestamp": "desc"}],
+        "query": {"bool": {"filter": [{"term": {"tenant_id.keyword": tenant_id}}]}}
+    }
     try:
         response = client.search(index="cti-reports", body=query)
         return [hit['_source'] for hit in response['hits']['hits']]
     except:
         return []
 
-def get_graph_data():
+def get_graph_data(tenant_id):
     """將情資轉換為 Graph 節點與連線"""
-    reports = get_all_reports()
+    reports = get_all_reports(tenant_id)
     nodes = []
     edges = []
     node_ids = set()
@@ -134,13 +160,13 @@ def get_graph_data():
 
     return nodes, edges
 
-def get_audit_logs():
+def get_audit_logs(tenant_id):
     """Fetch recent audit logs from OpenSearch"""
     client = get_opensearch_client()
     query = {
         "size": 1000,
         "sort": [{"timestamp": {"order": "desc"}}],
-        "query": {"match_all": {}}
+        "query": {"bool": {"filter": [{"term": {"tenant_id.keyword": tenant_id}}]}}
     }
     try:
         if not client.indices.exists(index="soc-audit-logs"):
@@ -153,13 +179,13 @@ def get_audit_logs():
         # st.error(f"Failed to fetch audit logs: {e}")
         return pd.DataFrame()
 
-def get_real_soc_data():
+def get_real_soc_data(tenant_id):
     """從 OpenSearch 撈取 SOC 告警 (包含 GeoIP 豐富化資料)"""
     client = get_opensearch_client()
     index_name = "security-logs-knn"
     query = {
         "size": 100, "sort": [{"timestamp": "desc"}],
-        "query": { "bool": { "must": [{ "term": { "threat_matched": True }}] } }
+        "query": {"bool": {"must": [{"term": {"threat_matched": True}}], "filter": [{"term": {"tenant_id.keyword": tenant_id}}]}}
     }
     try:
         response = client.search(index=index_name, body=query)
@@ -193,7 +219,7 @@ def get_real_soc_data():
     except:
         return pd.DataFrame()
     
-def get_related_reports(indicators):
+def get_related_reports(indicators, tenant_id):
     """
     動態查詢關聯報告
     """
@@ -213,8 +239,9 @@ def get_related_reports(indicators):
         query = {
             "size": 50,
             "query": {
-                "terms": {
-                    "value.keyword": target_values
+                "bool": {
+                    "must": [{"terms": {"value.keyword": target_values}}],
+                    "filter": [{"term": {"tenant_id.keyword": tenant_id}}]
                 }
             },
             "_source": ["related_reports"]
@@ -229,14 +256,14 @@ def get_related_reports(indicators):
     except Exception as e:
         return []
 
-def get_enriched_alerts():
+def get_enriched_alerts(tenant_id):
     """從 OpenSearch 撈取 CMDB 豐富化後的警報資料"""
     client = get_opensearch_client()
     index_name = "security-alerts"
     query = {
         "size": 100,
         "sort": [{"timestamp": "desc"}],
-        "query": {"match_all": {}}
+        "query": {"bool": {"filter": [{"term": {"tenant_id.keyword": tenant_id}}]}}
     }
     try:
         response = client.search(index=index_name, body=query)
@@ -257,16 +284,44 @@ if not check_password():
 st.sidebar.title("🛡️ CTI & SOC Platform")
 st.sidebar.success(f"Login as: {st.session_state.get('logged_in_user', 'Admin')}")
 
+selected_role = st.sidebar.selectbox("Role (Mock)", ROLES, index=ROLES.index(get_current_role()))
+st.session_state["user_role"] = selected_role
+
+tenant_options = ["tenant-alpha", "tenant-beta", "tenant-gamma"]
+current_tenant = get_current_tenant()
+tenant_index = tenant_options.index(current_tenant) if current_tenant in tenant_options else 0
+selected_tenant = st.sidebar.selectbox("Tenant (Mock)", tenant_options, index=tenant_index)
+st.session_state["tenant_id"] = selected_tenant
+
 if st.sidebar.button("Logout"):
     st.session_state["password_correct"] = False
     st.rerun()
 
+role = get_current_role()
+tenant_id = get_current_tenant()
+session_id = get_current_session_id()
+
 page = st.sidebar.radio("Navigation", ["🚨 Internal Threat Monitor (SOC)", "📈 Enriched Alerts Dashboard", "🔍 CTI Report Review", "🕸️ Threat Graph", "📚 Knowledge Base", "📜 Audit & Compliance Trail"])
+
+page_permissions = {
+    "🚨 Internal Threat Monitor (SOC)": "view_soc_dashboard",
+    "📈 Enriched Alerts Dashboard": "view_enriched_alerts",
+    "🔍 CTI Report Review": "view_cti_review",
+    "🕸️ Threat Graph": "view_threat_graph",
+    "📚 Knowledge Base": "view_knowledge_base",
+    "📜 Audit & Compliance Trail": "view_audit_logs",
+}
+
+required_action = page_permissions.get(page)
+if required_action and not check_permission(role, required_action):
+    deny_action(required_action)
+    st.stop()
 
 ## --- 1. SOC Dashboard ---
 if page == "🚨 Internal Threat Monitor (SOC)":
+    st.caption(f"Tenant: `{tenant_id}` | Role: `{role}` | Session: `{session_id}`")
     st.title("🚨 Security Operations Center")
-    df = get_real_soc_data()
+    df = get_real_soc_data(tenant_id)
     
     if df.empty:
         st.info("No active threats detected. (System Clean)")
@@ -488,6 +543,9 @@ if page == "🚨 Internal Threat Monitor (SOC)":
                     c1, c2 = st.columns([3, 1])
                     c1.write(f"**Justification**: {row.get('summary', 'Threat Matched')}")
                     if c2.button("⏪ Rollback / Unblock", key=f"rb_{row['id']}"):
+                        if not check_permission(role, "rollback_block"):
+                            deny_action("rollback_block")
+                            continue
                         try:
                             # 1. Call Mock SOAR
                             requests.post("http://soar-server:5000/unblock", json={"ip": row['source_ip']})
@@ -498,7 +556,10 @@ if page == "🚨 Internal Threat Monitor (SOC)":
                                 action="ROLLBACK_BLOCK",
                                 target=row['source_ip'],
                                 status="SUCCESS",
-                                justification="Manual Rollback requested by Analyst"
+                                justification="Manual Rollback requested by Analyst",
+                                role=role,
+                                tenant_id=tenant_id,
+                                session_id=session_id
                             )
                             
                             # 3. Update OpenSearch
@@ -557,7 +618,7 @@ if page == "🚨 Internal Threat Monitor (SOC)":
 # --- Enriched Alerts Dashboard (CMDB 面板) ---
 elif page == "📈 Enriched Alerts Dashboard":
     st.title("📈 Enriched Security Alerts Dashboard")
-    df_alerts = get_enriched_alerts()
+    df_alerts = get_enriched_alerts(tenant_id)
 
     if df_alerts.empty:
         st.info("No enriched alerts found yet. Run the Detection Engine to generate some!")
@@ -614,6 +675,9 @@ elif page == "🔍 CTI Report Review":
             edited_json = st.text_area("JSON Analysis", j_str, height=400, key=f"json_{task['id']}")
             
         if st.button("✅ Approve & Generate PDF", type="primary"):
+            if not check_permission(role, "approve_report"):
+                deny_action("approve_report")
+                st.stop()
             final_json = json.loads(edited_json)
             expiration_date = (datetime.now() + timedelta(days=30)).isoformat()
 
@@ -628,9 +692,9 @@ elif page == "🔍 CTI Report Review":
             report_info = {"filename": task['filename'], "confidence": final_json.get("confidence", 100)}
 
             for ip in indicators.get("ipv4", []):
-                upsert_indicator(ip, "ipv4", report_info)
+                upsert_indicator(ip, "ipv4", report_info, tenant_id=tenant_id)
             for domain in indicators.get("domains", []):
-                upsert_indicator(domain, "domain", report_info)
+                upsert_indicator(domain, "domain", report_info, tenant_id=tenant_id)
 
             doc = final_json.copy()
             doc.update({
@@ -639,7 +703,8 @@ elif page == "🔍 CTI Report Review":
                 "expiration_date": expiration_date,
                 "pdf_path": pdf_path,
                 "source_type": task['source_type'],
-                "threat_matched": False
+                "threat_matched": False,
+                "tenant_id": tenant_id
             })
             
             # 使用檔名當 ID 避免重複
@@ -653,7 +718,10 @@ elif page == "🔍 CTI Report Review":
                 target=task['filename'],
                 status="SUCCESS",
                 justification="Manual Approval by Analyst",
-                details={"confidence": final_json.get("confidence")}
+                details={"confidence": final_json.get("confidence")},
+                role=role,
+                tenant_id=tenant_id,
+                session_id=session_id
             )
             
             st.success(f"Approved! PDF generated at: {pdf_path}")
@@ -661,6 +729,9 @@ elif page == "🔍 CTI Report Review":
 
         rejection_reason = st.text_input("Rejection Reason (Optional - helps AI learn):", key=f"reason_{task['id']}")
         if st.button("🗑️ Reject"):
+            if not check_permission(role, "reject_report"):
+                deny_action("reject_report")
+                st.stop()
             update_task_status(task['id'], "REJECTED")
             
             # Optimization 5: Human Feedback Loop
@@ -671,7 +742,8 @@ elif page == "🔍 CTI Report Review":
                     "filename": task['filename'],
                     "content": task['raw_content'],
                     "reason": rejection_reason,
-                    "original_analysis": task['analysis_json']
+                    "original_analysis": task['analysis_json'],
+                    "tenant_id": tenant_id
                 }
                 try:
                     upload_to_opensearch(feedback_doc, f"feedback_{task['id']}", "ai-feedback")
@@ -686,7 +758,10 @@ elif page == "🔍 CTI Report Review":
                 target=task['filename'],
                 status="SUCCESS",
                 justification=rejection_reason or "No reason provided",
-                details={"original_confidence": task.get("confidence")}
+                details={"original_confidence": task.get("confidence")},
+                role=role,
+                tenant_id=tenant_id,
+                session_id=session_id
             )
 
             st.rerun()
@@ -694,7 +769,7 @@ elif page == "🔍 CTI Report Review":
 # --- Threat Graph ---
 elif page == "🕸️ Threat Graph":
     st.title("🕸️ Threat Intelligence Graph")
-    nodes, edges = get_graph_data()
+    nodes, edges = get_graph_data(tenant_id)
     
     if not nodes:
         st.info("No data to visualize.")
@@ -705,7 +780,7 @@ elif page == "🕸️ Threat Graph":
 # --- Knowledge Base (With Filters) ---
 elif page == "📚 Knowledge Base":
     st.title("📚 Intelligence Knowledge Base")
-    all_reports = get_all_reports()
+    all_reports = get_all_reports(tenant_id)
     
     if not all_reports:
         st.info("No reports found.")
@@ -800,7 +875,7 @@ elif page == "📚 Knowledge Base":
 
                     st.divider()
                     st.markdown("### 🔗 Related Intelligence")
-                    related = get_related_reports(r.get('indicators', {}))
+                    related = get_related_reports(r.get('indicators', {}), tenant_id)
                     if r.get('filename') in related: related.remove(r.get('filename'))
                     
                     if related:
@@ -813,7 +888,7 @@ elif page == "📜 Audit & Compliance Trail":
     st.title("📜 Audit & Compliance Trail (ISO 27001)")
     st.info("Immutable record of all AI and Analyst actions.")
     
-    df_audit = get_audit_logs()
+    df_audit = get_audit_logs(tenant_id)
     
     if df_audit.empty:
         st.warning("No audit logs found.")
@@ -829,7 +904,7 @@ elif page == "📜 Audit & Compliance Trail":
         if filter_status: df_audit = df_audit[df_audit['status'].isin(filter_status)]
         
         st.dataframe(
-            df_audit[['timestamp', 'actor', 'action', 'target', 'status', 'justification', 'event_id']], 
+            df_audit[['timestamp', 'actor', 'role', 'tenant_id', 'session_id', 'action', 'result', 'target', 'justification', 'event_id']], 
             use_container_width=True,
             hide_index=True
         )
