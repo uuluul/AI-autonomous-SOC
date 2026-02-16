@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import uuid
 import logging
 import glob
 import pika
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # 環境變數
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
-RABBITMQ_QUEUE = "cti_tasks"
+RABBITMQ_QUEUE = "cti_queue"
 ROLE = os.getenv("ROLE", "master")  # 'master' or 'worker'
 
 # 資料夾設定
@@ -334,31 +335,37 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     
     # --- 判斷來源並取得內容 ---
     file_path = None
-    
-    if "file_path" in task_payload:
-        # [方法 A: 檔案處理] Master 的任務
+    raw_content = None
+
+    # ========== 🆕 RAW MODE (E2E / API ingestion) ==========
+    if "raw_log" in task_payload or "message" in task_payload:
+        raw_content = task_payload.get("raw_log") or task_payload.get("message")
+        filename = task_payload.get("filename") or f"RAW_{task_payload.get('event_id', uuid.uuid4())}.log"
+
+        logger.info(f"  [Raw Mode] Processing: {filename} (event_id={task_payload.get('event_id')})")
+
+    # ========== 📂 FILE MODE ==========
+    elif "file_path" in task_payload:
         filename = task_payload.get("filename", "unknown.txt")
         file_path = task_payload["file_path"]
+
         logger.info(f"  [File Mode] Processing: {filename}")
-        
+
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 raw_content = f.read()
         except Exception as e:
             logger.error(f"  Failed to read file: {e}")
             return
-            
+
+    # ========== ⚡ STREAM MODE ==========
     else:
-        # [方法 B: 串流處理] Fluent Bit 的即時 Log
         logger.info(f"⚡ [Stream Mode] Processing live log event")
-        
-        # 自動生成一個虛擬檔名，方便後續邏輯識別
-        # 格式: LOG_STREAM_{timestamp}_{source_ip}
+
         ts = int(time.time())
-        src_ip = task_payload.get('source_ip', 'unknown_ip')
+        src_ip = task_payload.get("source_ip", "unknown_ip")
         filename = f"LOG_STREAM_{ts}_{src_ip}"
-        
-        # 將 JSON 物件轉回字串，因為後面的 PII Masker 和切片器吃的是字串
+
         raw_content = json.dumps(task_payload, ensure_ascii=False)
 
     # ================= PII 遮罩 (隱私保護) =================
@@ -414,6 +421,10 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         try:
             chunk_extraction = llm.get_extraction(enhanced_chunk)
             if chunk_extraction:
+                # Capture RAG Context for Explainable AI (XAI)
+                if rag_context:
+                    chunk_extraction["rag_context"] = rag_context
+                
                 chunk_results.append(chunk_extraction)
         except Exception as e:
             logger.error(f"  Error analyzing chunk {i+1}: {e}")
@@ -426,6 +437,11 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         return
 
     extracted = merge_extractions(chunk_results)
+
+    # === Multi-Tenancy Injection ===
+    tenant_id = task_payload.get("tenant_id", "default_tenant")
+    extracted["tenant_id"] = tenant_id
+    logger.info(f"  [Multi-Tenancy] Processing for Tenant: {tenant_id}")
 
     # 合併正規化資料 (補齊 IP 等欄位)
     if is_log and normalized_data:
@@ -460,18 +476,54 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     if extracted.get("confidence") is None:
         extracted["confidence"] = 0
 
-    # ================= 豐富化 (Enrichment) =================
+    # === Compatibility Fields (Test & Legacy Support) ===
+    extracted["ai_confidence"] = extracted["confidence"]
+    extracted["mitre_ttps"] = extracted.get("ttps", [])
+    
+    if extracted["confidence"] >= 80:
+        extracted["risk_level"] = "High"
+    elif extracted["confidence"] >= 50:
+        extracted["risk_level"] = "Medium"
+    else:
+        extracted["risk_level"] = "Low"
+
+    # ================= 豐富化 (Enrichment & Hybrid Detection) =================
     try:
         enriched_data = {}
+        ti_results = {}
         indicators = extracted.get("indicators", {})
         
+        max_ti_score = 0
+        
         for ip in indicators.get("ipv4", []):
+            # 1. Internal/Geo Enrichment
             info = enricher.enrich_ip(ip)
             if info["geo"] or info["asset"]:
                 enriched_data[ip] = info
-        
+            
+            # 2. External Threat Intel (Hybrid)
+            if "threat_intel" in info:
+                ti = info["threat_intel"]
+                ti_results[ip] = ti
+                if ti["score"] > max_ti_score:
+                    max_ti_score = ti["score"]
+                    
         extracted["enrichment"] = enriched_data
+        extracted["threat_intel"] = ti_results
         
+        # === Hybrid Scoring Logic ===
+        # If Threat Intel says it's malicious (Score > 80), override AI Confidence
+        current_conf = extracted.get("confidence", 0)
+        
+        if max_ti_score >= 80:
+            logger.warning(f"  Hybrid Detection: Threat Intel High Risk ({max_ti_score}). Boosting Confidence to 95.")
+            extracted["confidence"] = 95
+            extracted["attack_type"] = "Authorized Threat Intel Match"
+            
+        elif max_ti_score >= 50 and current_conf < 60:
+             logger.info(f"  Hybrid Detection: Threat Intel Suspicious ({max_ti_score}). Boosting Confidence.")
+             extracted["confidence"] = 75
+             
     except Exception as e:
         logger.error(f"  Enrichment failed: {e}")
 
@@ -581,6 +633,30 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                 is_confirmed_high_risk = False
                 force_human_review = True
                 break
+        
+        # === GUARDRAIL 2: Threat Intel Disagreement (AI Potential Hallucination) ===
+        # If AI says High Risk, but Threat Intel explicitly says CLEAN (Score < 20)
+        ti_data = extracted.get("threat_intel", {})
+        if ti_data and is_confirmed_high_risk:
+            # Check if ANY IP has high score. If ALL are low score, then downgrade.
+            max_ti = 0
+            for ip, info in ti_data.items():
+                if info.get("score", 0) > max_ti:
+                    max_ti = info.get("score", 0)
+            
+            if max_ti < 20: 
+                 logger.warning(f"🛑 [GUARDRAIL] AI High Confidence ({confidence}%) but Threat Intel says CLEAN (Max Score: {max_ti}). Downgrading to MANUAL.")
+                 
+                 audit_logger.log_event(
+                    actor="Hybrid-Guardrail",
+                    action="DOWNGRADE_ACTION",
+                    target=filename,
+                    status="SUCCESS",
+                    justification=f"Threat Intel Disagreement (AI: High vs TI: Clean)",
+                    details={"ai_confidence": confidence, "ti_score": max_ti}
+                )
+                 is_confirmed_high_risk = False
+                 force_human_review = True
 
     # 1. 純知識庫歸檔 (Crawlers OR Low Risk Manual/Logs)
     # If it's a crawler, or it's a Manual/Log entry that is NOT high risk, index only.
@@ -794,10 +870,15 @@ def run_master():
                     except OSError:
                         continue # 可能被其他 process 搶走了
 
-                    # 發送任務
+                    # 發送任務 (Multi-Tenancy Simulation)
+                    tenant = "default"
+                    if filename.startswith("alpha_"): tenant = "tenant_alpha"
+                    elif filename.startswith("beta_"): tenant = "tenant_beta"
+                    
                     task_payload = json.dumps({
                         "file_path": processing_path,
-                        "filename": filename
+                        "filename": filename,
+                        "tenant_id": tenant
                     })
                     
                     try:
