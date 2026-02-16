@@ -125,6 +125,18 @@ Newly implemented features for production environments (ISO 27001 / SOC 2 Ready)
     * **Resilient Architecture**: Worker nodes automatically recover from RabbitMQ broker outages (verified via Chaos Engineering).
     * **Scalability**: Docker Compose configuration supports horizontal scaling of worker nodes.
 
+### 10. Enterprise DevOps & Multi-Tenancy (New) 🚀
+* **🏢 Multi-Tenancy Support**:
+    * **Data Isolation**: All OpenSearch indices (`security-logs-knn`, `cti-reports`) are partitioned by `tenant_id`.
+    * **Tenant Views**: Dashboard supports filtering views by specific tenants (e.g., `tenant_alpha`).
+* **🔄 CI/CD Pipeline (GitHub Actions)**:
+    * **Automated Testing**: On every push, the system runs Unit, Smoke, and E2E tests.
+    * **Staging Environment**: Uses `docker-compose.staging.yml` with a **Mock LLM** to simulate AI responses without API costs.
+    * **Quality Gates**: Enforces `flake8` syntax checks and reachability tests before merge.
+* **🛠️ Standardized Engineering**:
+    * **Makefile**: Unified commands (`make unit`, `make e2e`) for local and CI execution.
+    * **Type Safety & Linting**: Codebase standardized for Python 3.9+ type hinting.
+
 
 | File Prefix | Source Type | Processing Mode | PDF Report | Primary Purpose |
 | :--- | :--- | :--- | :--- | :--- |
@@ -300,7 +312,30 @@ You can tweak the internal pipeline behavior by modifying src/run_pipeline.py. N
 * **Infrastructure: Docker & Docker Compose**
 * **Frontend: Streamlit, PyDeck (3D Maps), Plotly, Mermaid.js**
 * **Monitoring: psutil (System Resources)**
+
 * **Testing: Pytest (Unit/Integration), Chaos Engineering (Resilience)**
+
+## 🧪 Testing & Development
+This repository includes a standardized testing framework using `pytest` and `Makefile`.
+
+### 1. Run Tests
+```bash
+# Run all tests (Unit, Smoke, E2E)
+make test
+
+# Run specific suites
+make unit    # Syntax & Logic checks
+make smoke   # Container connectivity (RabbitMQ/OpenSearch)
+make e2e     # Full Pipeline verification (Log -> AI -> DB)
+```
+
+### 2. Staging Environment
+For integration testing without OpenAI costs, use the Staging environment which includes a **Mock LLM**.
+```bash
+docker compose -f docker-compose.staging.yml up -d --build
+```
+* **Mock LLM**: Simulates GPT-4 responses locally on port `8000`.
+* **Lightweight**: Excludes UI and Visualization containers to save resources.
 
 ## 📜 License & Acknowledgments
 
