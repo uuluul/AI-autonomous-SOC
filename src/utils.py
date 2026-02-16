@@ -144,6 +144,21 @@ def merge_extractions(extraction_list):
             if ttp_id and ttp_id not in seen_ttps:
                 merged["ttps"].append(ttp)
                 seen_ttps.add(ttp_id)
+        
+        # Merge RAG Context (XAI)
+        if "rag_context" in ext:
+            if "rag_context" not in merged:
+                merged["rag_context"] = []
+            
+            # Flatten list and avoid duplicates
+            contexts = ext["rag_context"]
+            if isinstance(contexts, list):
+                for ctx in contexts:
+                    if ctx not in merged["rag_context"]:
+                        merged["rag_context"].append(ctx)
+            elif isinstance(contexts, str):
+                 if contexts not in merged["rag_context"]:
+                    merged["rag_context"].append(contexts)
 
         # 合併 軟體名稱
         for soft in ext.get("target_software", []):

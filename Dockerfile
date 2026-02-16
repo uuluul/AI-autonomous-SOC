@@ -15,5 +15,12 @@ COPY src/ /app/src/
 # 3. 設定 Python 路徑，確保程式能 import src 模組
 ENV PYTHONPATH=/app
 
+# [Security] Create a non-root user
+RUN useradd -m -u 1000 socuser && \
+    chown -R socuser:socuser /app
+
+# Switch to non-root user
+USER socuser
+
 # 預設指令
-CMD ["python", "/app/src/app.py"]
+CMD ["python", "/app/src/app_ui.py"]

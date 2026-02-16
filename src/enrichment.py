@@ -3,6 +3,7 @@ import json
 import os
 import logging
 from functools import lru_cache
+from src.threat_intel_mock import MockThreatIntel
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,12 @@ class EnrichmentEngine:
         self.assets_path = assets_path
         self.assets = self._load_assets()
         self.geo_reader = self._load_geoip()
+        try:
+            self.ti_client = MockThreatIntel()
+            logger.info("  Threat Intel Client Initialized (Mock).")
+        except Exception as e:
+            logger.error(f"  Failed to init Threat Intel: {e}")
+            self.ti_client = None
 
     def _load_assets(self):
         """載入內部資產表 (CMDB)"""
@@ -70,8 +77,20 @@ class EnrichmentEngine:
         # 查詢 CMDB (內部 IP)
         if ip_address in self.assets:
             result["asset"] = self.assets[ip_address]
+            
+        # 查詢 Threat Intelligence (外部 IP)
+        if self.ti_client and not result["asset"]:
+            ti_data = self.ti_client.get_ip_reputation(ip_address)
+            result["threat_intel"] = ti_data
+            logger.info(f"🛡️ Threat Intel: {ip_address} => {ti_data['verdict']} (Score: {ti_data['score']})")
 
         return result
+    
+    def enrich_threat_intel(self, ip):
+        """Standalone method for TI lookup"""
+        if self.ti_client:
+            return self.ti_client.get_ip_reputation(ip)
+        return {"score": 0, "verdict": "Unknown", "source": "None"}
 
     def close(self):
         if self.geo_reader:

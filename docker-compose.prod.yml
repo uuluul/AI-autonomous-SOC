@@ -20,15 +20,15 @@ services:
         soft: 65536
         hard: 65536
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200" # Localhost only
     networks:
       - opensearch-net
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
-      interval: 10s
+      interval: 20s
       timeout: 10s
-      retries: 5
+      retries: 10
     deploy:
       resources:
         limits:
@@ -55,8 +55,8 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672" # Management UI (Localhost)
     environment:
       RABBITMQ_DEFAULT_USER: user
       RABBITMQ_DEFAULT_PASS: password
@@ -92,7 +92,7 @@ services:
     volumes:
       - ./src:/app/src
     ports:
-      - "5001:5000"
+      - "127.0.0.1:5001:5000" # Localhost only
     networks:
       - opensearch-net
     restart: always

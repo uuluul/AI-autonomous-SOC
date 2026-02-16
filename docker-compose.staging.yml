@@ -1,0 +1,105 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-staging
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - staging-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-staging
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - staging-net
+
+  # ✅ IMPORTANT: run YOUR mock LLM server, not http.server
+  mock-llm:
+    image: python:3.9-slim
+    container_name: mock-llm-staging
+    working_dir: /app
+    volumes:
+      - ./src:/app/src:ro
+    command: ["python", "/app/src/mock_llm_server.py"]
+    ports:
+      - "8000:8000"
+    networks:
+      - staging-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/embeddings').read()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    container_name: cti-pipeline-master-staging
+    environment:
+      - OPENSEARCH_HOST=opensearch
+      - RABBITMQ_HOST=rabbitmq
+      # ✅ make sure your pipeline points to mock LLM
+      - LLM_BASE_URL=http://mock-llm:8000
+      - ROLE=master
+      - LLM_PROVIDER=local
+      - LOCAL_LLM_URL=http://mock-llm:8000/v1
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+    networks:
+      - staging-net
+    # ✅ IMPORTANT: create indices first, then run pipeline
+    command: ["bash", "-lc", "python /app/src/setup_opensearch.py && python -u /app/src/run_pipeline.py"]
+
+  worker:
+    build: .
+    container_name: cti-pipeline-worker-staging
+    environment:
+      - OPENSEARCH_HOST=opensearch
+      - RABBITMQ_HOST=rabbitmq
+      - LLM_BASE_URL=http://mock-llm:8000
+      - ROLE=worker
+      - LLM_PROVIDER=local
+      - LOCAL_LLM_URL=http://mock-llm:8000/v1
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+    networks:
+      - staging-net
+    command: ["bash", "-lc", "python /app/src/setup_opensearch.py && python -u /app/src/run_pipeline.py"]
+
+networks:
+  staging-net:
+    driver: bridge

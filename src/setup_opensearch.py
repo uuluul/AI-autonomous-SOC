@@ -63,6 +63,7 @@ def create_knn_index(client):
         },
         "mappings": {
             "properties": {
+                "tenant_id": {"type": "keyword"},
                 "timestamp": {"type": "date"},
                 "log_text": {"type": "text"},
                 "log_vector": {
@@ -90,6 +91,7 @@ def create_reports_index(client):
     index_body = {
         "mappings": {
             "properties": {
+                "tenant_id": {"type": "keyword"},
                 "timestamp": {"type": "date"},
                 "filename": {"type": "keyword"},
                 "confidence": {"type": "integer"},
@@ -109,6 +111,7 @@ def create_alerts_index(client):
     index_body = {
         "mappings": {
             "properties": {
+                "tenant_id": {"type": "keyword"},
                 "timestamp": {"type": "date"},
                 "rule_name": {"type": "keyword"},
                 "asset_hostname": {"type": "keyword"},
@@ -126,6 +129,7 @@ def create_audit_index(client):
     index_body = {
         "mappings": {
             "properties": {
+                "tenant_id": {"type": "keyword"},  # Multi-Tenancy Support
                 "timestamp": {"type": "date"},
                 "actor": {"type": "keyword"},
                 "action": {"type": "keyword"},
@@ -138,6 +142,20 @@ def create_audit_index(client):
         }
     }
     _create_if_not_exists(client, INDEX_AUDIT_LOGS, index_body)
+
+def update_mappings(client):
+    """(Migrstion Utility) Update existing indices with new fields"""
+    indices = [INDEX_LOGS_KNN, INDEX_CTI_REPORTS, INDEX_ALERTS, INDEX_AUDIT_LOGS]
+    for idx in indices:
+        if client.indices.exists(index=idx):
+            try:
+                client.indices.put_mapping(
+                    index=idx,
+                    body={"properties": {"tenant_id": {"type": "keyword"}}}
+                )
+                logger.info(f"  Updated mapping for {idx}: Added 'tenant_id'")
+            except Exception as e:
+                logger.warning(f"  Failed to update mapping for {idx}: {e}")
 
 def apply_retention_policy(client):
     """
@@ -249,3 +267,11 @@ def upsert_indicator(indicator_value, indicator_type, report_data):
 
 if __name__ == "__main__":
     create_index()
+    try:
+        client = get_opensearch_client()
+        update_mappings(client)
+    except: pass
+    try:
+        client = get_opensearch_client()
+        update_mappings(client)
+    except: pass

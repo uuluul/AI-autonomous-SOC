@@ -47,3 +47,4 @@ out/*
 # --- Logs ---
 logs/*
 !logs/.gitkeep.env.bak
+data/*.json
