@@ -130,11 +130,11 @@ def _emit_zero_log_event(title: str, content: str, source: str = "crawler"):
                 body=json.dumps(event),
                 properties=pika.BasicProperties(delivery_mode=2),
             )
-            logger.info(f"🚨 Zero-Log Event emitted: {cve_id} from '{title[:50]}...'")
+            logger.info(f" Zero-Log Event emitted: {cve_id} from '{title[:50]}...'")
 
         connection.close()
     except Exception as exc:
-        logger.warning(f"⚠️ Failed to emit zero-log event (non-critical): {exc}")
+        logger.warning(f" Failed to emit zero-log event (non-critical): {exc}")
 
 # ================= 爬蟲 1: RSS Feeds =================
 
@@ -260,7 +260,7 @@ def fetch_abusech_threatfox(limit=10):
                     content += "Indicators (IoCs):\n"
                     content += f"- Type: {ioc_type}, Indicator: {ioc_value}\n"
                     
-                    # 依然使用 ABUSECH 前綴，維持與 run_pipeline.py 的相容性
+                    # 使用 ABUSECH 前綴，維持和 run_pipeline.py 的相容性
                     save_to_input_folder("ABUSECH", title, content)
                     saved_count += 1
             else:

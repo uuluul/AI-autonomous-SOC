@@ -46,8 +46,8 @@ class AuditLogger:
             # We allow OpenSearch to auto-generate the document ID by passing None
             success = upload_to_opensearch(doc, doc_id=doc["event_id"], index_name=self.index_name)
             if success:
-                logger.info(f"🔒 [AUDIT] {actor} performed {action} on {target} | Status: {status}")
+                logger.info(f" [AUDIT] {actor} performed {action} on {target} | Status: {status}")
             else:
-                logger.error(f"❌ [AUDIT WRITE ERROR] Failed to write audit log for {action}")
+                logger.error(f" [AUDIT WRITE ERROR] Failed to write audit log for {action}")
         except Exception as e:
-            logger.critical(f"❌ [AUDIT CRITICAL FAILURE] System could not write compliance log! Error: {e}")
+            logger.critical(f" [AUDIT CRITICAL FAILURE] System could not write compliance log! Error: {e}")

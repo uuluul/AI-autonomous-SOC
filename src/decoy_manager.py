@@ -230,7 +230,7 @@ def create_isolated_network(
     network = docker_client.networks.create(
         name=net_name,
         driver="bridge",
-        internal=True,          # ★ CRITICAL: no external routing
+        internal=True,          # no external routing
         check_duplicate=True,
         ipam=docker.types.IPAMConfig(
             pool_configs=[
@@ -297,8 +297,8 @@ def deploy_honeypot_container(
         },
         mem_limit="128m",
         cpu_quota=25000,                            # 25% of one core
-        read_only=True,                             # ★ Immutable filesystem
-        security_opt=["no-new-privileges:true"],    # ★ Block privesc
+        read_only=True,                             # Immutable filesystem
+        security_opt=["no-new-privileges:true"],    # Block privesc
         restart_policy={"Name": "no"},              # No auto-restart
     )
 
@@ -335,7 +335,7 @@ def deploy_fluent_bit_sidecar(
         image="fluent/fluent-bit:latest",
         name=f"sidecar-{decoy_id[:12]}",
         detach=True,
-        network=honeypot_network_name,      # First: honeypot bridge
+        network=honeypot_network_name,      # honeypot bridge
         environment={
             "DECOY_ID": decoy_id,
             "RABBITMQ_HOST": RABBITMQ_HOST,
@@ -466,7 +466,7 @@ class DecoyLifecycleManager:
             logger.info(f"Decoy {decoy_id[:8]} fully torn down (reason: {reason})")
 
         except Exception as exc:
-            logger.error(f"❌ Teardown failed for {decoy_id[:8]}: {exc}")
+            logger.error(f" Teardown failed for {decoy_id[:8]}: {exc}")
 
         # Cleanup thread reference
         self._teardown_threads.pop(decoy_id, None)
@@ -534,7 +534,7 @@ class DecoyLifecycleManager:
                         c.stop(timeout=5)
                         c.remove(force=True)
                 except (ValueError, TypeError):
-                    pass  # Can't parse age, leave it
+                    pass 
 
             # Also clean up orphaned networks
             for net in self.docker.networks.list():
@@ -816,9 +816,9 @@ class DecoyManager:
                         payload = json.loads(body)
                         self.handle_deploy_task(payload)
                     except json.JSONDecodeError as exc:
-                        logger.error(f"❌ Invalid JSON in deploy task: {exc}")
+                        logger.error(f" Invalid JSON in deploy task: {exc}")
                     except Exception as exc:
-                        logger.error(f"❌ Deploy task error: {exc}", exc_info=True)
+                        logger.error(f" Deploy task error: {exc}", exc_info=True)
                     finally:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -827,19 +827,19 @@ class DecoyManager:
                 )
 
                 logger.info(
-                    f"🍯 Listening on '{DEPLOY_QUEUE}' "
+                    f" Listening on '{DEPLOY_QUEUE}' "
                     f"(max_decoys={MAX_ACTIVE_DECOYS}, ttl={DEFAULT_TTL_HOURS}h) …"
                 )
                 channel.start_consuming()
 
             except pika.exceptions.AMQPConnectionError as exc:
-                logger.warning(f"⚠️  RabbitMQ lost: {exc}. Reconnecting in 10s …")
+                logger.warning(f"  RabbitMQ lost: {exc}. Reconnecting in 10s …")
                 time.sleep(10)
             except KeyboardInterrupt:
-                logger.info("🛑 Decoy Manager shutting down (KeyboardInterrupt)")
+                logger.info(" Decoy Manager shutting down (KeyboardInterrupt)")
                 break
             except Exception as exc:
-                logger.error(f"❌ Unexpected consumer error: {exc}", exc_info=True)
+                logger.error(f" Unexpected consumer error: {exc}", exc_info=True)
                 time.sleep(10)
 
 

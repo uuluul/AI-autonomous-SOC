@@ -136,7 +136,7 @@ services:
       - ./data:/app/data
       - ./out:/app/out
       - ./src:/app/src
-    env_file: .env # Fix: Use env_file instead of volume mount
+    env_file: .env
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
@@ -161,7 +161,7 @@ services:
       - ./data:/app/data
       - ./out:/app/out
       - ./src:/app/src
-    env_file: .env # Fix: Use env_file instead of volume mount
+    env_file: .env
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - RABBITMQ_HOST=rabbitmq
@@ -240,7 +240,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
-    env_file: .env # Fix: Use env_file instead of volume mount
+    env_file: .env
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
@@ -264,15 +264,14 @@ services:
   decoy-manager:
     build: .
     container_name: decoy-manager
-    user: root # Fix: Add root user for docker.sock access
+    user: root
     command: python /app/src/decoy_manager.py
     volumes:
       - ./src:/app/src
       - ./data:/app/data
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker API access
-    env_file: .env # Fix: Use env_file instead of volume mount
-    environment:
+    env_file: .env
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
       - RABBITMQ_HOST=rabbitmq
@@ -299,7 +298,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
-    env_file: .env # Fix: Use env_file instead of volume mount
+    env_file: .env
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
@@ -328,7 +327,7 @@ services:
       - ./data:/app/data
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    env_file: .env # Fix: Use env_file instead of volume mount
+    env_file: .env
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200

@@ -10,7 +10,7 @@ python /app/src/setup_soar_integration.py
 echo "  [2/3] Setting up Dashboards index patterns..."
 python /app/src/setup_dashboards.py
 
-# 未來可以加更多...
+# 可以加更多...
 # echo "  [3/3] Setting up RCF anomaly detection..."
 # python /app/src/setup_rcf.py
 

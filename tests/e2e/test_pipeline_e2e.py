@@ -10,7 +10,7 @@ from opensearchpy import OpenSearch
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
 INDEX_NAME = os.getenv("E2E_INDEX_NAME", "cti-reports")
-QUEUE_NAME = os.getenv("RABBITMQ_QUEUE", "cti_queue")  # ✅ 對齊 worker
+QUEUE_NAME = os.getenv("RABBITMQ_QUEUE", "cti_queue")  # 對齊 worker
 
 TENANT_ID = "tenant_e2e"
 
@@ -54,7 +54,7 @@ def test_pipeline_flow(os_client):
     """
     test_id = str(uuid.uuid4())
     now = time.time()
-    trace = f"e2e={test_id}"  # ✅ 唯一 token，避免撞到舊資料
+    trace = f"e2e={test_id}"  # 唯一 token，避免撞到舊資料
 
     payload = {
         "event_id": test_id,
@@ -103,7 +103,7 @@ def test_pipeline_flow(os_client):
     for _ in range(30):  # up to 30s
         time.sleep(1)
         try:
-            # ✅ 先 refresh，降低 “剛寫入但搜不到” 的 flake
+            # 先 refresh，降低 “剛寫入但搜不到” 的 flake
             try:
                 os_client.indices.refresh(index=INDEX_NAME)
             except Exception:
@@ -125,15 +125,11 @@ def test_pipeline_flow(os_client):
     # 3) Validations
     doc = found_doc
     assert doc.get("tenant_id") == TENANT_ID
-
-    # ✅ 這三個才是你系統升級計劃裡最核心、最該驗證的欄位
     assert "risk_level" in doc
     assert "ai_confidence" in doc
     assert "mitre_ttps" in doc
 
-    # Optional / compatibility checks (有就驗證型別，沒有不當錯)
     if "event_id" in doc:
-        # 有些 pipeline 會重寫 event_id，不強制等於 test_id
         assert isinstance(doc["event_id"], str)
     if "source_ip" in doc:
         assert doc["source_ip"] == "1.2.3.4"

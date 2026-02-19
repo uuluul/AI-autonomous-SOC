@@ -824,14 +824,14 @@ class MigrationEngine:
             result["completed_at"] = datetime.utcnow().isoformat()
 
             logger.info(
-                f"✅ Rollback complete for migration {migration_id[:8]}: "
+                f" Rollback complete for migration {migration_id[:8]}: "
                 f"restored {original_name}"
             )
 
         except Exception as exc:
             result["status"] = "FAILED"
             result["error"] = str(exc)
-            logger.error(f"❌ Rollback failed: {exc}")
+            logger.error(f" Rollback failed: {exc}")
 
         self._index_audit(result)
         return result
@@ -881,7 +881,7 @@ class MigrationEngine:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Audit indexing failed: {exc}")
+            logger.error(f" Audit indexing failed: {exc}")
 
     def _index_mutation(self, record: dict):
         """Index active migration to mtd-active-mutations (cleaned)."""
@@ -898,7 +898,7 @@ class MigrationEngine:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Mutation indexing failed: {exc}")
+            logger.error(f" Mutation indexing failed: {exc}")
 
 
 # ─── Helper ──────────────────────────────────────────────────

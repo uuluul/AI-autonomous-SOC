@@ -180,7 +180,7 @@ def select_template(
     for keywords, template_key in _sw_rules:
         if any(kw in sw for sw in software for kw in keywords):
             logger.info(
-                f"📋 Template '{template_key}' selected via software match "
+                f" Template '{template_key}' selected via software match "
                 f"(host={target_host})"
             )
             return _make_result(template_key, "software_match")
@@ -189,7 +189,7 @@ def select_template(
     if target_port and target_port in _PORT_TEMPLATE_MAP:
         template_key = _PORT_TEMPLATE_MAP[target_port]
         logger.info(
-            f"📋 Template '{template_key}' selected via port {target_port} "
+            f" Template '{template_key}' selected via port {target_port} "
             f"(host={target_host})"
         )
         return _make_result(template_key, f"port_{target_port}")
@@ -198,14 +198,14 @@ def select_template(
     for keywords, template_key in _HOSTNAME_HINTS:
         if any(kw in target_host for kw in keywords):
             logger.info(
-                f"📋 Template '{template_key}' selected via hostname hint "
+                f" Template '{template_key}' selected via hostname hint "
                 f"(host={target_host})"
             )
             return _make_result(template_key, "hostname_hint")
 
     # ─── Priority 4: Default SSH (universal lure) ─────────
     logger.info(
-        f"📋 Default template 'ssh_server' selected for "
+        f" Default template 'ssh_server' selected for "
         f"host={target_host} (no specific match)"
     )
     return _make_result("ssh_server", "default_fallback")

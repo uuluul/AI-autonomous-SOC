@@ -217,7 +217,6 @@ class SimpleHandler(BaseHTTPRequestHandler):
                 print(f"  [SOAR] Created Playbook {playbook_id}", flush=True)
             except Exception as e:
                 print(f"  [SOAR] Failed to index Playbook {playbook_id}: {e}", flush=True)
-                # Continuing to action simulation anyway...
 
             # --- 2. Execute Action (Simulation) ---
             if risk_score > 70:

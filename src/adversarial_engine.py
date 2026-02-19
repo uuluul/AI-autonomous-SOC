@@ -829,7 +829,7 @@ class AdversarialEngine:
                 )
             except Exception as mtd_exc:
                 logger.warning(
-                    f"⚠️  Failed to dispatch MTD action (non-critical): {mtd_exc}"
+                    f"  Failed to dispatch MTD action (non-critical): {mtd_exc}"
                 )
 
         return prediction_doc
@@ -865,7 +865,7 @@ class AdversarialEngine:
                     f"{len(result.get('exposed_assets', []))} asset(s) exposed!"
                 )
             except Exception as exc:
-                logger.error(f"❌ Failed to index zero-log prediction: {exc}")
+                logger.error(f" Failed to index zero-log prediction: {exc}")
 
         return result
 
@@ -874,7 +874,7 @@ class AdversarialEngine:
     @staticmethod
     def _compute_risk(chain: list, reachable: list) -> float:
         if not chain:
-            logger.warning("⚠️ _compute_risk called with empty chain — returning 0")
+            logger.warning(" _compute_risk called with empty chain — returning 0")
             return 0.0
         avg_conf = sum(s.get("confidence", 0.5) for s in chain) / len(chain)
         if reachable:
@@ -922,7 +922,7 @@ class AdversarialEngine:
                         data = json.loads(body)
                         self.handle_alert_prediction(data)
                     except Exception as exc:
-                        logger.error(f"❌ Prediction task error: {exc}", exc_info=True)
+                        logger.error(f" Prediction task error: {exc}", exc_info=True)
                     finally:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -931,7 +931,7 @@ class AdversarialEngine:
                         data = json.loads(body)
                         self.handle_zero_log_event(data)
                     except Exception as exc:
-                        logger.error(f"❌ Zero-log event error: {exc}", exc_info=True)
+                        logger.error(f" Zero-log event error: {exc}", exc_info=True)
                     finally:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -945,13 +945,13 @@ class AdversarialEngine:
                 channel.start_consuming()
 
             except pika.exceptions.AMQPConnectionError as exc:
-                logger.warning(f"⚠️  RabbitMQ connection lost: {exc}. Reconnecting in 10s …")
+                logger.warning(f"  RabbitMQ connection lost: {exc}. Reconnecting in 10s …")
                 import time; time.sleep(10)
             except KeyboardInterrupt:
-                logger.info("🛑 Adversarial Engine shutting down (KeyboardInterrupt)")
+                logger.info(" Adversarial Engine shutting down (KeyboardInterrupt)")
                 break
             except Exception as exc:
-                logger.error(f"❌ Unexpected error in consumer loop: {exc}", exc_info=True)
+                logger.error(f" Unexpected error in consumer loop: {exc}", exc_info=True)
                 import time; time.sleep(10)
 
 

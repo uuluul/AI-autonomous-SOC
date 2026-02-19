@@ -30,7 +30,7 @@ def generate_red_team_response(prompt_text):
     ips = list(set(re.findall(r"\b(?:10|172|192)\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", prompt_text)))
     
     # Filter out likely source IPs or irrelevant ones if possible, but for mock, just pick a few distinct ones.
-    # We need at least 2-3 unique IPs for a kill chain.
+    # It need at least 2-3 unique IPs for a kill chain.
     # If not enough IPs found, fallback to some defaults that might exist in the lab environment.
     target_pool = ips if len(ips) >= 2 else ["10.20.30.200", "10.0.0.5", "10.0.0.20"]
     
@@ -219,7 +219,7 @@ class Handler(BaseHTTPRequestHandler):
             response_data = generate_default_response(full_context)
 
         # 4. Wrap in OpenAI ChatCompletion format
-        # Note: The 'content' of the message must be a JSON string as expected by the consumers.
+        # The 'content' of the message must be a JSON string as expected by the consumers.
         openai_resp = {
             "id": "mock-chatcmpl-" + body.get("model", "default"),
             "object": "chat.completion",
@@ -238,7 +238,7 @@ class Handler(BaseHTTPRequestHandler):
         return _json(self, 200, openai_resp)
 
     def log_message(self, format, *args):
-        # Use our logger instead of stderr
+        # Use logger instead of stderr
         return
 
 if __name__ == "__main__":

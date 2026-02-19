@@ -98,9 +98,9 @@ class ValidationEngine:
     """
 
     def __init__(self):
-        logger.info("⚖️  Initialising Validation Engine …")
+        logger.info(" Initialising Validation Engine …")
         self.os = get_opensearch_client()
-        logger.info("✅ Validation Engine initialised")
+        logger.info(" Validation Engine initialised")
 
     # ─── Main Entry Point ──────────────────────────────────
 
@@ -124,7 +124,7 @@ class ValidationEngine:
         port = event.get("port", 0)
 
         logger.info(
-            f"📨 Processing honeypot event: decoy={decoy_id[:8]}, "
+            f" Processing honeypot event: decoy={decoy_id[:8]}, "
             f"attacker={attacker_ip}, service={service}, port={port}"
         )
 
@@ -173,10 +173,10 @@ class ValidationEngine:
             self._trigger_mtd_evaluation(telemetry_doc, prediction)
 
         logger.info(
-            f"✅ Event processed: {telemetry_doc['event_id'][:8]} "
+            f" Event processed: {telemetry_doc['event_id'][:8]} "
             f"(technique={telemetry_doc['technique_detected']}, "
             f"novel={telemetry_doc['is_novel_payload']}, "
-            f"validated={'✅' if prediction else '⏭️'})"
+            f"validated={'CORRECT' if prediction else 'PASS'})"
         )
 
         return telemetry_doc
@@ -210,7 +210,7 @@ class ValidationEngine:
             return pred_resp.get("_source")
 
         except Exception as exc:
-            logger.warning(f"⚠️  Prediction lookup failed for decoy {decoy_id[:8]}: {exc}")
+            logger.warning(f"  Prediction lookup failed for decoy {decoy_id[:8]}: {exc}")
             return None
 
     # ─── Prediction Validation ─────────────────────────────
@@ -270,11 +270,11 @@ class ValidationEngine:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to index accuracy record: {exc}")
+            logger.error(f" Failed to index accuracy record: {exc}")
 
-        status_emoji = "✅ CORRECT" if was_correct else "❌ MISS"
+        status_emoji = " CORRECT" if was_correct else " MISS"
         logger.info(
-            f"⚖️  Prediction {prediction.get('prediction_id', '?')[:8]}: "
+            f" Prediction {prediction.get('prediction_id', '?')[:8]}: "
             f"{status_emoji} — predicted {predicted_technique}, "
             f"actual {actual_technique} "
             f"(confidence={predicted_confidence:.0%})"
@@ -303,9 +303,9 @@ class ValidationEngine:
                 }},
                 refresh=True,
             )
-            logger.info(f"📝 Prediction {pred_id[:8]} marked as VALIDATED")
+            logger.info(f" Prediction {pred_id[:8]} marked as VALIDATED")
         except Exception as exc:
-            logger.warning(f"⚠️  Failed to update prediction status: {exc}")
+            logger.warning(f" Failed to update prediction status: {exc}")
 
     # ─── Payload Novelty Detection ─────────────────────────
 
@@ -337,7 +337,7 @@ class ValidationEngine:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to index telemetry: {exc}")
+            logger.error(f" Failed to index telemetry: {exc}")
 
     # ─── RAG Feedback (THE SELF-EVOLUTION STEP) ────────────
 
@@ -356,7 +356,7 @@ class ValidationEngine:
         """
         technique = telemetry.get("technique_detected", "Unknown")
         is_novel = telemetry.get("is_novel_payload", False)
-        novelty_flag = "🆕 NOVEL ZERO-DAY PAYLOAD" if is_novel else ""
+        novelty_flag = " NOVEL ZERO-DAY PAYLOAD" if is_novel else ""
 
         # ─── Build RAG document ───────────────────────────
         rag_document = {
@@ -408,7 +408,7 @@ class ValidationEngine:
                 f"(novel={is_novel})"
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to index RAG feedback: {exc}")
+            logger.error(f" Failed to index RAG feedback: {exc}")
 
         # ─── Novel payloads → CTI Reports for human review ─
         if is_novel:
@@ -418,7 +418,7 @@ class ValidationEngine:
                     "source_type": "zero_day_capture",
                     "inoculation_status": "PENDING_REVIEW",
                     "review_notes": (
-                        "⚠️ This payload was captured in a honeypot and has "
+                        " This payload was captured in a honeypot and has "
                         "NEVER been seen before. Tier 2+ analyst review required "
                         "before inoculation rules are deployed."
                     ),
@@ -430,13 +430,13 @@ class ValidationEngine:
                     refresh=True,
                 )
                 logger.warning(
-                    f"🚨 ZERO-DAY PAYLOAD CAPTURED & INDEXED: "
+                    f" ZERO-DAY PAYLOAD CAPTURED & INDEXED: "
                     f"hash={telemetry['payload_hash'][:16]}… "
                     f"from {telemetry['attacker_ip']} "
                     f"→ inoculation_status=PENDING_REVIEW"
                 )
             except Exception as exc:
-                logger.error(f"❌ Failed to index zero-day capture: {exc}")
+                logger.error(f" Failed to index zero-day capture: {exc}")
 
     # ─── Technique Classification ──────────────────────────
 
@@ -509,12 +509,12 @@ class ValidationEngine:
             )
             connection.close()
             logger.info(
-                f"🛡️ MTD trigger dispatched for capture "
+                f" MTD trigger dispatched for capture "
                 f"from {telemetry.get('attacker_ip')}"
             )
         except Exception as exc:
             logger.warning(
-                f"⚠️  Failed to dispatch MTD trigger (non-critical): {exc}"
+                f"  Failed to dispatch MTD trigger (non-critical): {exc}"
             )
 
     # ─── Utility ───────────────────────────────────────────
@@ -575,7 +575,7 @@ class ValidationEngine:
                 ],
             }
         except Exception as exc:
-            logger.warning(f"⚠️  Accuracy stats query failed: {exc}")
+            logger.warning(f"  Accuracy stats query failed: {exc}")
             return {
                 "total_validations": 0,
                 "correct_predictions": 0,
@@ -589,7 +589,7 @@ class ValidationEngine:
 
     def run(self):
         """Main event loop — consume honeypot_events from RabbitMQ."""
-        logger.info("⚖️  Validation Engine online — starting RabbitMQ consumer …")
+        logger.info("  Validation Engine online — starting RabbitMQ consumer …")
 
         while True:
             try:
@@ -617,10 +617,10 @@ class ValidationEngine:
                         event = json.loads(body)
                         self.process_honeypot_event(event)
                     except json.JSONDecodeError as exc:
-                        logger.error(f"❌ Invalid JSON in honeypot event: {exc}")
+                        logger.error(f" Invalid JSON in honeypot event: {exc}")
                     except Exception as exc:
                         logger.error(
-                            f"❌ Honeypot event processing error: {exc}",
+                            f" Honeypot event processing error: {exc}",
                             exc_info=True,
                         )
                     finally:
@@ -631,18 +631,18 @@ class ValidationEngine:
                     on_message_callback=on_honeypot_event,
                 )
 
-                logger.info(f"⚖️  Listening on '{HONEYPOT_QUEUE}' …")
+                logger.info(f"  Listening on '{HONEYPOT_QUEUE}' …")
                 channel.start_consuming()
 
             except pika.exceptions.AMQPConnectionError as exc:
-                logger.warning(f"⚠️  RabbitMQ lost: {exc}. Reconnecting in 10s …")
+                logger.warning(f"  RabbitMQ lost: {exc}. Reconnecting in 10s …")
                 time.sleep(10)
             except KeyboardInterrupt:
-                logger.info("🛑 Validation Engine shutting down (KeyboardInterrupt)")
+                logger.info(" Validation Engine shutting down (KeyboardInterrupt)")
                 break
             except Exception as exc:
                 logger.error(
-                    f"❌ Unexpected consumer error: {exc}",
+                    f" Unexpected consumer error: {exc}",
                     exc_info=True,
                 )
                 time.sleep(10)

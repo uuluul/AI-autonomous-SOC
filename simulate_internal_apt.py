@@ -18,7 +18,6 @@ def send_critical_attack():
         channel = connection.channel()
         channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
-        # 🎯 關鍵修改：將 Source 改為真實的容器名稱 "cti-ui"
         REAL_TARGET_CONTAINER = "ai-powered-autonomous-soc-cti-pipeline-worker-1"
 
         attack_message = (
@@ -35,7 +34,7 @@ def send_critical_attack():
         attack_event = {
             "filename": f"RAW_{uuid.uuid4()}.log",
             "message": attack_message,
-            "source_ip": REAL_TARGET_CONTAINER, # 👈 MTD 會根據這個名稱去找 Docker 容器
+            "source_ip": REAL_TARGET_CONTAINER, # MTD 會根據這個名稱去找 Docker 容器
             "target_ip": "10.0.0.20",
             "attack_type": "Credential Dumping & Lateral Movement",
             "cve_id": "CVE-2021-44228",
@@ -51,12 +50,12 @@ def send_critical_attack():
             properties=pika.BasicProperties(delivery_mode=2)
         )
         
-        print(f"🚀 [SUCCESS] 攻擊指令已發送！")
-        print(f"🎯 模擬受害目標：{REAL_TARGET_CONTAINER} (真實容器)")
-        print(f"🔥 預期行為：MTD 將觸發 {REAL_TARGET_CONTAINER} 的自動遷移")
+        print(f" [SUCCESS] Attack command sent!")
+        print(f" Simulated Victim Target: {REAL_TARGET_CONTAINER} (Real Container)")
+        print(f" Expected Behavior: MTD will trigger auto-migration for {REAL_TARGET_CONTAINER}")
         connection.close()
     except Exception as e:
-        print(f"❌ 發送失敗: {e}")
+        print(f" Failed to send: {e}")
 
 if __name__ == "__main__":
     send_critical_attack()

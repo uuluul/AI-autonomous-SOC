@@ -62,7 +62,7 @@ def _safe_query(os_client, index: str, body: dict) -> list:
         resp = os_client.search(index=index, body=body, size=200)
         return [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
     except Exception as exc:
-        logger.warning(f"⚠️  Query to {index} failed: {exc}")
+        logger.warning(f"  Query to {index} failed: {exc}")
         return []
 
 
@@ -82,7 +82,7 @@ def run_feedback_loop():
     cutoff = (datetime.utcnow() - timedelta(hours=LOOKBACK_HOURS)).isoformat()
 
     logger.info(
-        f"🔄 Starting feedback loop — lookback: {LOOKBACK_HOURS}h "
+        f" Starting feedback loop — lookback: {LOOKBACK_HOURS}h "
         f"(cutoff: {cutoff})"
     )
 
@@ -101,7 +101,7 @@ def run_feedback_loop():
         ],
     }
     captures = _safe_query(os_client, HONEYPOT_INDEX, honeypot_query)
-    logger.info(f"🍯 Found {len(captures)} honeypot captures in last {LOOKBACK_HOURS}h")
+    logger.info(f" Found {len(captures)} honeypot captures in last {LOOKBACK_HOURS}h")
 
     if not captures:
         # Also try MTD audit log for migration-related trap telemetry
@@ -122,7 +122,7 @@ def run_feedback_loop():
         mtd_actions = _safe_query(os_client, MTD_AUDIT_INDEX, mtd_query)
         if mtd_actions:
             logger.info(
-                f"🔄 Synthesizing {len(mtd_actions)} MTD actions as "
+                f" Synthesizing {len(mtd_actions)} MTD actions as "
                 f"validated honeypot interactions"
             )
             for action in mtd_actions:
@@ -152,7 +152,7 @@ def run_feedback_loop():
         ],
     }
     predictions = _safe_query(os_client, PREDICTIONS_INDEX, prediction_query)
-    logger.info(f"🎯 Found {len(predictions)} predictions in last {LOOKBACK_HOURS}h")
+    logger.info(f" Found {len(predictions)} predictions in last {LOOKBACK_HOURS}h")
 
     # ─── 3. Cross-reference: match IPs ────────────────────
     # Build lookup: scanner_ip → prediction
@@ -233,16 +233,16 @@ def run_feedback_loop():
                     f"{str(payload_text)[:100]}. Confidence updated to 100%."
                 )
             except Exception as exc:
-                logger.error(f"❌ Failed to index validated CTI: {exc}")
+                logger.error(f" Failed to index validated CTI: {exc}")
 
         else:
             # No matching prediction — log as unmatched honeypot activity
             logger.debug(
-                f"🔍 Honeypot capture from {source_ip} — no matching prediction"
+                f" Honeypot capture from {source_ip} — no matching prediction"
             )
 
     logger.info(
-        f"✅ Feedback loop complete: {validated_count} validated CTI documents "
+        f" Feedback loop complete: {validated_count} validated CTI documents "
         f"injected into {VALIDATED_INDEX}"
     )
     return validated_count

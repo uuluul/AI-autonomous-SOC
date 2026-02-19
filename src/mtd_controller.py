@@ -805,18 +805,18 @@ def _connect_rabbitmq():
                     retry_delay=5,
                 )
             )
-            logger.info(f"✅ Connected to RabbitMQ at {RABBITMQ_HOST} as {user}")
+            logger.info(f" Connected to RabbitMQ at {RABBITMQ_HOST} as {user}")
             return connection
         except pika.exceptions.AMQPConnectionError as exc:
             retry += 1
             wait = min(2 ** retry, 30)
             logger.warning(
-                f"⚠️  RabbitMQ connection failed (attempt {retry}/{max_retries}): "
+                f" RabbitMQ connection failed (attempt {retry}/{max_retries}): "
                 f"{exc}. Retrying in {wait}s…"
             )
             time.sleep(wait)
 
-    logger.error("❌ Could not connect to RabbitMQ after all retries.")
+    logger.error(" Could not connect to RabbitMQ after all retries.")
     sys.exit(1)
 
 
@@ -871,12 +871,12 @@ def main():
                     controller.process_trigger(trigger)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except json.JSONDecodeError:
-                    logger.error(f"❌ Invalid JSON in action queue")
+                    logger.error(f" Invalid JSON in action queue")
                     ch.basic_nack(
                         delivery_tag=method.delivery_tag, requeue=False,
                     )
                 except Exception as exc:
-                    logger.error(f"❌ Error processing trigger: {exc}")
+                    logger.error(f" Error processing trigger: {exc}")
                     ch.basic_nack(
                         delivery_tag=method.delivery_tag, requeue=True,
                     )
@@ -887,12 +887,12 @@ def main():
                     controller.process_approval(approval)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except json.JSONDecodeError:
-                    logger.error(f"❌ Invalid JSON in approval queue")
+                    logger.error(f" Invalid JSON in approval queue")
                     ch.basic_nack(
                         delivery_tag=method.delivery_tag, requeue=False,
                     )
                 except Exception as exc:
-                    logger.error(f"❌ Error processing approval: {exc}")
+                    logger.error(f" Error processing approval: {exc}")
                     ch.basic_nack(
                         delivery_tag=method.delivery_tag, requeue=True,
                     )
@@ -905,11 +905,11 @@ def main():
             )
 
             logger.info(
-                f"👂 Listening on queues: "
+                f" Listening on queues: "
                 f"{MTD_ACTION_QUEUE}, {MTD_APPROVAL_QUEUE}"
             )
             logger.info(
-                f"📊 Thresholds: "
+                f" Thresholds: "
                 f"obfuscation={THRESHOLD_OBFUSCATION}, "
                 f"migrate_propose={THRESHOLD_MIGRATION_PROPOSAL}, "
                 f"migrate_execute={THRESHOLD_MIGRATION_EXECUTE}"
@@ -918,10 +918,10 @@ def main():
             channel.start_consuming()
 
         except pika.exceptions.AMQPConnectionError:
-            logger.warning("⚠️  RabbitMQ connection lost. Reconnecting…")
+            logger.warning(" RabbitMQ connection lost. Reconnecting…")
             time.sleep(5)
         except Exception as exc:
-            logger.error(f"❌ Unexpected error: {exc}", exc_info=True)
+            logger.error(f" Unexpected error: {exc}", exc_info=True)
             time.sleep(5)
         finally:
             if connection and not connection.is_closed:
