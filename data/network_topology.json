@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2026-02-16T00:00:00Z",
+    "description": "Network adjacency map for NeoVigil topology-aware attack-path prediction. Defines which hosts can directly communicate, zone isolation policies, and firewall deny rules."
+  },
+  "zones": {
+    "dmz":         { "can_reach": ["corporate"],              "isolation": "high"     },
+    "corporate":   { "can_reach": ["core_infra", "data_tier"], "isolation": "medium"   },
+    "core_infra":  { "can_reach": ["data_tier", "corporate"],  "isolation": "high"     },
+    "data_tier":   { "can_reach": [],                          "isolation": "critical" }
+  },
+  "adjacency": {
+    "192.168.1.10":  ["192.168.1.50", "192.168.1.100"],
+    "192.168.1.50":  ["192.168.1.10", "192.168.1.100", "10.0.0.1"],
+    "192.168.1.100": ["192.168.1.50"],
+    "10.0.0.1":      ["192.168.1.50", "192.168.1.10"]
+  },
+  "firewall_rules": [
+    { "src": "dmz",       "dst": "core_infra", "ports": [],     "action": "deny"  },
+    { "src": "dmz",       "dst": "data_tier",  "ports": [],     "action": "deny"  },
+    { "src": "corporate", "dst": "data_tier",  "ports": [5432], "action": "allow" }
+  ]
+}

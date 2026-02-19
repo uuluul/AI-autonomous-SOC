@@ -1,0 +1,105 @@
+{
+    "iis_10": {
+        "display_name": "Microsoft IIS 10.0",
+        "server_header": "Microsoft-IIS/10.0",
+        "x_powered_by": "ASP.NET",
+        "x_aspnet_version": "4.0.30319",
+        "set_cookie_prefix": "ASP.NET_SessionId",
+        "remove_headers": [
+            "X-Request-ID",
+            "X-Varnish",
+            "X-Upstream"
+        ],
+        "add_headers": {
+            "X-Frame-Options": "SAMEORIGIN",
+            "X-Content-Type-Options": "nosniff"
+        },
+        "custom_error_style": "iis",
+        "description": "Spoofs Microsoft IIS 10.0 on Windows Server. Effective against attackers preparing IIS-specific exploits (web.config traversal, .aspx handlers)."
+    },
+    "nginx_legacy": {
+        "display_name": "nginx/1.18.0 (Ubuntu)",
+        "server_header": "nginx/1.18.0 (Ubuntu)",
+        "x_powered_by": null,
+        "remove_headers": [
+            "X-Powered-By",
+            "X-Runtime"
+        ],
+        "add_headers": {
+            "X-Cache": "HIT from cdn-proxy",
+            "X-Cache-Status": "HIT"
+        },
+        "custom_error_style": "nginx",
+        "description": "Spoofs an older Nginx behind a CDN. Lures attackers into trying Nginx-specific CVEs (e.g., buffer overflow in chunked transfer)."
+    },
+    "apache_old": {
+        "display_name": "Apache/2.2.34 (Unix) mod_ssl/2.2.34",
+        "server_header": "Apache/2.2.34 (Unix) mod_ssl/2.2.34",
+        "x_powered_by": "PHP/5.6.40",
+        "remove_headers": [
+            "X-Request-ID"
+        ],
+        "add_headers": {
+            "X-Mod-Security": "DISABLED",
+            "X-Backend": "app-server-01"
+        },
+        "custom_error_style": "apache",
+        "description": "Spoofs a vulnerable Apache 2.2 running outdated PHP 5.6. Extremely attractive to automated exploit scanners targeting known PHP/Apache CVEs."
+    },
+    "lighttpd": {
+        "display_name": "lighttpd/1.4.55",
+        "server_header": "lighttpd/1.4.55",
+        "x_powered_by": null,
+        "remove_headers": [
+            "X-Powered-By",
+            "X-Request-ID",
+            "X-Upstream"
+        ],
+        "add_headers": {},
+        "custom_error_style": "lighttpd",
+        "description": "Spoofs lighttpd, commonly used in embedded/IoT devices. Lures attackers looking for IoT-class vulnerabilities."
+    },
+    "tomcat_9": {
+        "display_name": "Apache Tomcat/9.0.62",
+        "server_header": "Apache-Coyote/1.1",
+        "x_powered_by": "Servlet/4.0 JSP/2.3",
+        "remove_headers": [
+            "X-Request-ID"
+        ],
+        "add_headers": {
+            "X-Content-Type-Options": "nosniff"
+        },
+        "custom_error_style": "tomcat",
+        "description": "Spoofs Apache Tomcat 9. Attracts attackers targeting Java deserialization, JSP injection, and manager app brute-force."
+    },
+    "cloudflare_edge": {
+        "display_name": "cloudflare",
+        "server_header": "cloudflare",
+        "x_powered_by": null,
+        "remove_headers": [
+            "X-Upstream",
+            "X-Runtime",
+            "X-Request-ID"
+        ],
+        "add_headers": {
+            "CF-RAY": "auto-generate",
+            "CF-Cache-Status": "DYNAMIC",
+            "alt-svc": "h3=\":443\"; ma=86400"
+        },
+        "custom_error_style": "cloudflare",
+        "description": "Spoofs a Cloudflare edge node. Discourages direct exploitation and forces attackers to reconsider their approach vector."
+    },
+    "_metadata": {
+        "version": "1.0",
+        "last_updated": "2026-02-16T04:30:00Z",
+        "selection_strategy": "When the real server is X, spoof a DIFFERENT platform Y. This forces the attacker to prepare Y-specific exploits that will fail against X.",
+        "opposite_map": {
+            "apache": "iis_10",
+            "nginx": "apache_old",
+            "iis": "nginx_legacy",
+            "tomcat": "lighttpd",
+            "postgresql": "iis_10",
+            "default": "cloudflare_edge"
+        }
+    }
+}

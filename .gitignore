@@ -8,13 +8,9 @@ __pycache__/
 .vscode/
 *.pyc
 
-# Test Artifacts
+# Test Artifacts (Logs & Temp Files)
 *.log
 simulation.log
-test_*.sh
-chaos_*.sh
-src/test_*.py
-data/input/*.txt
 data/failed_tasks/
 data/processed/
 .env.bak
@@ -24,21 +20,23 @@ data/input/*
 !data/input/.gitkeep
 !data/input/sample_cti.txt
 
-# 忽略處理過的歸檔
+# Processed Archives
 data/processed/*
 !data/processed/.gitkeep
 
-# 忽略產生的報告
+# Reports
 data/reports/*
 !data/reports/.gitkeep
 
-# 忽略失敗的任務
+# Failed Tasks
 data/failed_tasks/*
 !data/failed_tasks/.gitkeep
 
-# 忽略地端資料庫
+# Local Databases (Do NOT Commit)
 data/cti_tasks.db
 data/*.mmdb
+data/opensearch/
+data/rabbitmq/
 
 # --- Outputs ---
 out/*
@@ -46,5 +44,10 @@ out/*
 
 # --- Logs ---
 logs/*
-!logs/.gitkeep.env.bak
+!logs/.gitkeep
+
+# JSON Dump
 data/*.json
+!data/network_topology.json
+!data/obfuscation_profiles.json
+!data/assets.json

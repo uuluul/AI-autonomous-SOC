@@ -6,6 +6,11 @@ import os
 import time
 from datetime import datetime
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from socketserver import ThreadingMixIn
+
+# Define ThreadingHTTPServer
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 # RabbitMQ Config
 RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'rabbitmq')
@@ -305,6 +310,6 @@ if __name__ == "__main__":
     init_indices()
     
     # Ensure pika is installed (it is in requirements.txt)
-    server = HTTPServer(('0.0.0.0', 5000), SimpleHandler)
+    server = ThreadingHTTPServer(('0.0.0.0', 5000), SimpleHandler)
     print("   ✅ Real SOAR Server listening on port 5000... (Analysis Enabled)", flush=True)
     server.serve_forever()

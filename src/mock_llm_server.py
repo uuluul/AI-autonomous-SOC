@@ -2,6 +2,12 @@ import json
 import re
 import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+import threading
+
+# Define ThreadingHTTPServer for Python < 3.7 or if not available
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [MOCK-LLM] %(message)s")
@@ -236,4 +242,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     logger.info(f"🚀 Context-Aware Mock LLM Server running on port {PORT}")
-    HTTPServer((HOST, PORT), Handler).serve_forever()
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
