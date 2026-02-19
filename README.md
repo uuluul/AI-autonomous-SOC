@@ -489,3 +489,29 @@ This project is licensed under the **MIT License**.
 - **[STIX™ 2.1](https://oasis-open.github.io/cti-documentation/)** — OASIS Open Standard for threat intelligence
 - **[AIDEFEND](https://github.com/edward-playground/aidefense-framework)** — AI Defense Framework by Edward Lee (CC BY 4.0)
 - **[OASIS stix2-validator](https://github.com/oasis-open/cti-stix-validator)** — STIX 2.1 compliance validation
+
+---
+
+## 🚀 Future Roadmap & Enterprise Scalability
+
+While the current architecture is robust and fully functional for staging and demonstration purposes, the following enhancements are planned for the production environment to handle petabyte-scale telemetry and ensure high availability:
+
+### 1. Data Lifecycle Management & Storage Tiering (OpenSearch ISM)
+To optimize storage costs and query performance for massive security logs, we will implement **Hot-Warm-Cold Architecture** via Index State Management (ISM):
+* **Hot Tier (NVMe SSDs):** For real-time ingestion, active AI enrichment, and high-frequency querying (Retention: 1-30 days).
+* **Warm/Cold Tier (High-Capacity HDDs):** For long-term compliance storage, historical auditing, and threat hunting (Retention: 30-180+ days). 
+* *Note: The initial ISM policy blueprint is already defined in `config/opensearch_ism_policy.json`.*
+
+### 2. High Availability (HA) & Clustering
+Transitioning from a single-node deployment to a fully distributed cluster:
+* **OpenSearch Cluster:** Deploying dedicated Master, Ingest, and Data nodes across multiple availability zones.
+* **RabbitMQ Mirrored Queues:** Upgrading the `cti_exchange` and queues to a clustered setup to ensure zero message loss during node failures.
+
+### 3. Advanced AI Orchestration (SOAR Integration)
+Re-activating the fully integrated SOAR container to allow the AI to not only generate CTI playbooks but also autonomously execute containment actions (e.g., isolating compromised IPs via firewall APIs).
+
+### 4. Container Orchestration & Auto-Scaling (Kubernetes)
+Migrating from Docker Compose to a fully managed **Kubernetes (K8s)** cluster (e.g., AWS EKS, GCP GKE) for production-grade orchestration and resilience:
+* **Event-Driven Auto-Scaling (KEDA):** Dynamically scaling the Python AI Worker pods based on the RabbitMQ `cti_queue` depth. This ensures zero latency during DDoS attacks or sudden surges in telemetry, while scaling down during idle times to save cloud costs.
+* **Stateful Resilience:** Deploying OpenSearch and RabbitMQ via K8s StatefulSets with Persistent Volume Claims (PVCs) mapped directly to our defined Hot/Warm storage tiers.
+* **Self-Healing & Zero-Downtime:** Leveraging K8s liveness and readiness probes to guarantee maximum uptime for the ingestion and threat detection pipeline.
