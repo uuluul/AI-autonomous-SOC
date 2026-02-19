@@ -78,7 +78,6 @@ The result is a **closed-loop defense system** where:
 
 ### ⚡ Phase 1 — PREDICT: Topology-Aware Attack Path Prediction
 
-> *"If you know the enemy and know yourself, you need not fear the result of a hundred battles."*
 
 Phase 1 transforms NeoVigil from a detection engine into a **prediction engine**. Using a Red Team LLM persona called **REDSPEC** (Red-team Speculative Prediction Engine for Cyber-attacks), the system analyzes every high-severity alert and predicts the attacker's next 3 kill chain steps.
 
@@ -118,7 +117,6 @@ The Streamlit dashboard renders predictions as an interactive **🎯 Predictive 
 
 ### 🍯 Phase 2 — DECEIVE: Self-Evolving Dynamic Honeypots
 
-> *"Appear weak when you are strong, and strong when you are weak."*
 
 Phase 2 closes the loop. When Phase 1 predicts an attack path, Phase 2 automatically deploys a **honeypot on the predicted path** — a realistic decoy service that looks just like the real target but is an instrumented trap.
 
@@ -167,7 +165,6 @@ This is not a static system. **Every attacker that touches NeoVigil makes it har
 
 ### 🔄 Phase 3 — MUTATE: Moving Target Defense
 
-> *"The attack surface the adversary mapped yesterday no longer exists today."*
 
 Phase 3 is the final piece of the triad. When the MTD composite threat score reaches critical thresholds, NeoVigil **dynamically alters the live production infrastructure** — spoofing server fingerprints and performing zero-downtime container migrations — so that all attacker reconnaissance becomes instantly invalid.
 
