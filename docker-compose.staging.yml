@@ -51,10 +51,10 @@ services:
     networks:
       - staging-net
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/embeddings').read()\""]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/embeddings"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   app:
     build: .
