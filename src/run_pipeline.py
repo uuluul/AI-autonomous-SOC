@@ -337,10 +337,8 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     file_path = None
     raw_content = None
 
-        logger.info(f"  [Raw Mode] Processing: {filename} (event_id={task_payload.get('event_id')})")
-
     # ========== [File Mode] ==========
-    elif "file_path" in task_payload:
+    if "file_path" in task_payload:
         filename = task_payload.get("filename", "unknown.txt")
         file_path = task_payload["file_path"]
 
@@ -624,7 +622,6 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     indicators_list = extracted.get("indicators", {}).get("ipv4", [])
     
     if is_confirmed_high_risk:
-        for ip in indicators_list:
         for ip in indicators_list:
             if is_critical_infrastructure(ip):
                 logger.warning(f"[GUARDRAIL] Target {ip} is CRITICAL INFRASTRUCTURE. Downgrading to MANUAL APPROVAL.")

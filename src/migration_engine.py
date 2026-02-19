@@ -610,7 +610,8 @@ class MigrationEngine:
             try:
                 green_container.stop(timeout=5)
                 green_container.remove(force=True)
-                logger.info(f"[{short_id}] Green container cleaned up")            except Exception:
+                logger.info(f"[{short_id}] Green container cleaned up")
+            except Exception:
                 pass
         if green_network:
             try:
