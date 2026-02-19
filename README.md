@@ -1,8 +1,4 @@
-<div align="center">
-
-# 🛡️ NeoVigil:The Active Adversarial Architecture for Autonomous Cyber Defense**
-
-</div>
+## 🛡️ NeoVigil:The Active Adversarial Architecture for Autonomous Cyber Defense
 
 ---
 
