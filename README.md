@@ -62,7 +62,6 @@ The result is a **closed-loop defense system** where:
 3. **Phase 2** captures the attacker's tools and feeds them back into Phase 1,
 4. **Phase 3** mutates the real infrastructure so the attacker's reconnaissance becomes worthless.
 
-> *"The supreme art of war is to subdue the enemy without fighting."* — Sun Tzu
 
 ---
 
@@ -490,13 +489,3 @@ This project is licensed under the **MIT License**.
 - **[STIX™ 2.1](https://oasis-open.github.io/cti-documentation/)** — OASIS Open Standard for threat intelligence
 - **[AIDEFEND](https://github.com/edward-playground/aidefense-framework)** — AI Defense Framework by Edward Lee (CC BY 4.0)
 - **[OASIS stix2-validator](https://github.com/oasis-open/cti-stix-validator)** — STIX 2.1 compliance validation
-
----
-
-<div align="center">
-
-**NeoVigil** — *Predict. Deceive. Mutate.*
-
-*Built for defenders who refuse to play catch-up.*
-
-</div>
