@@ -46,6 +46,7 @@ def insert_task(filename, source_type, raw_content, analysis_json, confidence):
 
 def get_pending_tasks():
     """取得所有待審核任務"""
+    init_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()

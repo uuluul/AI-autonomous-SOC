@@ -340,6 +340,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     # ========== 🆕 RAW MODE (E2E / API ingestion) ==========
     if "raw_log" in task_payload or "message" in task_payload:
         raw_content = task_payload.get("raw_log") or task_payload.get("message")
+        # Robustness: if message is a dict/list, convert to JSON string
+        if not isinstance(raw_content, str):
+            raw_content = json.dumps(raw_content, ensure_ascii=False, default=str)
         filename = task_payload.get("filename") or f"RAW_{task_payload.get('event_id', uuid.uuid4())}.log"
 
         logger.info(f"  [Raw Mode] Processing: {filename} (event_id={task_payload.get('event_id')})")
@@ -375,7 +378,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     if safe_content != raw_content:
         logger.info("  PII Masking applied (Emails/Phones redacted).")
 
-    is_log = filename.startswith("LOG_")
+    is_log = filename.startswith("LOG_") or filename.startswith("RAW_")
     normalized_data = {} # 存放結構化資料
 
     # ================ AI 自適應正規化  =================
@@ -386,8 +389,21 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             logger.info(f"  {filename} is valid JSON. Using natively.")
         except json.JSONDecodeError:
             # 加入輕量級快篩 (Optimization 3)
-            suspicious_keywords = ["failed", "error", "drop", "deny", "alert", "attack", "unauthorized", "sql", "cve", "exploited"]
-            if not any(k in safe_content.lower() for k in suspicious_keywords):
+            suspicious_keywords = [
+                "failed", "error", "drop", "deny", "alert", "attack",
+                "unauthorized", "sql", "cve", "exploited", "exploit",
+                "jndi", "ldap", "log4j", "log4shell", "rce", "remote code",
+                "shell", "injection", "malware", "ransomware", "brute",
+                "overflow", "traversal", "xxe", "xss", "payload", "beacon",
+                "cobalt", "metasploit", "reverse", "backdoor", "privilege",
+                "escalat", "lateral", "exfiltrat", "c2", "command and control",
+                "t1003", "t1190", "t1059", "t1021", "ssh", "honeypot", "decoy",
+                "credential", "dump", "lsass", "mimikatz", "psexec",
+            ]
+            # Also check task_payload metadata — high-severity events must NEVER be triaged out
+            payload_text = json.dumps(task_payload, default=str).lower()
+            combined_text = safe_content.lower() + " " + payload_text
+            if not any(k in combined_text for k in suspicious_keywords):
                 logger.info(f"  [Triage] Log looks completely normal. Skipping AI to save cost.")
                 return # 直接略過正常 Log
 
@@ -581,7 +597,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         f.write(stix_json_str)
 
     # ================= 智慧分流路由邏輯 ===================
-    is_log = filename.startswith("LOG_")
+    is_log = filename.startswith("LOG_") or filename.startswith("RAW_")
     is_rss = filename.startswith("RSS_")
     is_otx = filename.startswith("OTX_CTI_")
     is_abusech = filename.startswith("ABUSECH_CTI_")
@@ -693,15 +709,14 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         WHITELIST_IPS = {"8.8.8.8", "1.1.1.1", "127.0.0.1"} 
         indicators = extracted.get("indicators", {})
         
-        # Pre-check: Don't generate report if IP is whitelisted (only for logs)
+        # Pre-check: Don't generate report if the ATTACKER (source) IP is whitelisted.
+        # IMPORTANT: Only check the source_ip, NOT all indicator IPs.
+        # Internal target IPs (10.x, 192.168.x) are legitimate attack destinations
+        # and must NOT be filtered out.
         if is_log:
-            should_skip = False
-            for ip in indicators.get("ipv4", []):
-                if ip in WHITELIST_IPS or ip.startswith("192.168.") or ip.startswith("10."):
-                    logger.info(f"    Log Source {ip} is whitelisted. Skipping Report Generation.")
-                    should_skip = True
-                    break
-            if should_skip:
+            source_ip = extracted.get("source_ip") or task_payload.get("source_ip", "")
+            if source_ip in WHITELIST_IPS:
+                logger.info(f"    Log Source {source_ip} is whitelisted. Skipping Report Generation.")
                 return
 
         trigger_reason = "Confirmed High Risk (Manual/Log)"
@@ -749,8 +764,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         # 如果是 Log 或 Manual，同步到 SOC Dashboard (Map Needs Data)
         if is_log or is_manual:
             soc_doc = doc.copy()
-            first_ip = indicators.get("ipv4", [None])[0]
-            soc_doc["source_ip"] = first_ip if first_ip else "Unknown"
+            ipv4_list = indicators.get("ipv4") or []
+            first_ip = ipv4_list[0] if ipv4_list else None
+            soc_doc["source_ip"] = first_ip if first_ip else (extracted.get("source_ip") or task_payload.get("source_ip", "Unknown"))
             soc_doc["log_text"] = raw_content
             soc_doc["message"] = raw_content
             soc_doc["threat_matched"] = True 
@@ -777,8 +793,18 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                     "timestamp": datetime.now().isoformat(),
                     "confidence": confidence,
                 }
+                # Use credentials for prediction task dispatch
+                user = os.getenv("RABBITMQ_USER", "user")
+                password = os.getenv("RABBITMQ_PASS", "password")
+                credentials = pika.PlainCredentials(user, password)
+                
                 pred_conn = pika.BlockingConnection(
-                    pika.ConnectionParameters(host=RABBITMQ_HOST, connection_attempts=2, retry_delay=1)
+                   pika.ConnectionParameters(
+                       host=RABBITMQ_HOST, 
+                       credentials=credentials,
+                       connection_attempts=2, 
+                       retry_delay=1
+                   )
                 )
                 pred_ch = pred_conn.channel()
                 pred_ch.queue_declare(queue="prediction_tasks", durable=True)
@@ -951,7 +977,15 @@ def safe_process_task(ch, method, properties, body, llm, enricher, cve_enricher,
     """
     try:
         # 解析訊息 (可能是 Master 的檔案路徑，也可能是 Fluent Bit 的 JSON)
+        # 解析訊息 (可能是 Master 的檔案路徑，也可能是 Fluent Bit 的 JSON)
         task_payload = json.loads(body)
+        
+        # Handle double-encoded JSON (common in some pipeline configurations)
+        if isinstance(task_payload, str):
+            try:
+                task_payload = json.loads(task_payload)
+            except json.JSONDecodeError:
+                pass # fail soft, maybe it's just a string message
         
         # 呼叫通用的處理函式
         process_task(task_payload, llm, enricher, cve_enricher, audit_logger)

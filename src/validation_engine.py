@@ -486,9 +486,15 @@ class ValidationEngine:
                 "is_novel_payload": telemetry.get("is_novel_payload", False),
                 "timestamp": datetime.utcnow().isoformat(),
             }
+            # Use credentials
+            user = os.getenv("RABBITMQ_USER", "user")
+            password = os.getenv("RABBITMQ_PASS", "password")
+            credentials = pika.PlainCredentials(user, password)
+
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=RABBITMQ_HOST,
+                    credentials=credentials,
                     connection_attempts=2,
                     retry_delay=1,
                 )
@@ -587,9 +593,15 @@ class ValidationEngine:
 
         while True:
             try:
+                # Use credentials
+                user = os.getenv("RABBITMQ_USER", "user")
+                password = os.getenv("RABBITMQ_PASS", "password")
+                credentials = pika.PlainCredentials(user, password)
+
                 connection = pika.BlockingConnection(
                     pika.ConnectionParameters(
                         host=RABBITMQ_HOST,
+                        credentials=credentials,
                         heartbeat=600,
                         blocked_connection_timeout=300,
                         connection_attempts=10,

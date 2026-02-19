@@ -8,7 +8,7 @@ services:
       - cluster.name=opensearch-cluster
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g" # Performance Tuning: 1GB Heap
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=admin
       - DISABLE_SECURITY_PLUGIN=true 
     ulimits:
@@ -17,6 +17,8 @@ services:
         hard: -1
     ports:
       - "9200:9200"
+    volumes: # Data Persistence
+      - ./data/opensearch:/usr/share/opensearch/data
     networks:
       - opensearch-net
     healthcheck:
@@ -24,6 +26,18 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+
+  # Dashboards
+  mock-llm:
+    build: .
+    container_name: mock-llm
+    command: python /app/src/mock_llm_server.py
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    networks:
+      - opensearch-net
 
   # Dashboards
   opensearch-dashboards:
@@ -47,6 +61,8 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes: # Data Persistence
+      - ./data/rabbitmq:/var/lib/rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: user
       RABBITMQ_DEFAULT_PASS: password
@@ -120,18 +136,19 @@ services:
       - ./data:/app/data
       - ./out:/app/out
       - ./src:/app/src
-      - ./.env:/app/.env
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
       - RABBITMQ_HOST=rabbitmq
       - ROLE=master
+      - LLM_PROVIDER=local
+      - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       opensearch-node:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    #  抓情資 -> 產STIX -> 跑Sigma 的循環
     command: ["python", "-u", "/app/src/run_pipeline.py"] 
     networks:
       - opensearch-net
@@ -139,16 +156,18 @@ services:
   # CTI Pipeline Worker (Consumer)
   cti-pipeline-worker:
     build: .
-    # 不指定 container_name
+    # No container_name
     volumes:
       - ./data:/app/data
       - ./out:/app/out
       - ./src:/app/src
-      - ./.env:/app/.env
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - RABBITMQ_HOST=rabbitmq
       - ROLE=worker
+      - LLM_PROVIDER=local
+      - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       opensearch-node:
         condition: service_healthy
@@ -158,7 +177,7 @@ services:
     networks:
       - opensearch-net
     deploy:
-      replicas: 3 # 開3個 Worker
+      replicas: 3 # 3 Workers
 
   # Threat Hunter
   threat-hunter:
@@ -221,12 +240,13 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
-      - ./.env:/app/.env
-    env_file: .env
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
       - RABBITMQ_HOST=rabbitmq
+      - LLM_PROVIDER=local
+      - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -244,14 +264,14 @@ services:
   decoy-manager:
     build: .
     container_name: decoy-manager
+    user: root # Fix: Add root user for docker.sock access
     command: python /app/src/decoy_manager.py
     volumes:
       - ./src:/app/src
       - ./data:/app/data
       - ./config:/app/config
-      - ./.env:/app/.env
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker API access (read-only)
-    env_file: .env
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker API access
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
@@ -279,8 +299,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
-      - ./.env:/app/.env
-    env_file: .env
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
@@ -302,14 +321,14 @@ services:
   mtd-controller:
     build: .
     container_name: mtd-controller
+    user: root
     command: python /app/src/mtd_controller.py
     volumes:
       - ./src:/app/src
       - ./data:/app/data
       - ./config:/app/config
-      - ./.env:/app/.env
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    env_file: .env
+    env_file: .env # Fix: Use env_file instead of volume mount
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200

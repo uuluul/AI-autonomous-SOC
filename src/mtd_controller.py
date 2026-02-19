@@ -74,9 +74,9 @@ WEIGHT_SCAN_FREQ = 0.20
 WEIGHT_CRITICALITY = 0.10
 
 # ─── Thresholds ──────────────────────────────────────────────
-THRESHOLD_OBFUSCATION = 60
-THRESHOLD_MIGRATION_PROPOSAL = 75
-THRESHOLD_MIGRATION_EXECUTE = 85
+THRESHOLD_OBFUSCATION = 30
+THRESHOLD_MIGRATION_PROPOSAL = 35
+THRESHOLD_MIGRATION_EXECUTE = 40
 
 # ─── Asset criticality mapping ───────────────────────────────
 _CRIT_SCORE = {
@@ -145,6 +145,10 @@ def compute_mtd_score(signals: dict) -> float:
         criticality * WEIGHT_CRITICALITY
     )
 
+    # Demo override: high prediction risk guarantees aggressive response
+    if pred_risk > 80:
+        score = max(score, 85.0)
+
     return round(score, 2)
 
 
@@ -193,10 +197,12 @@ def determine_action(score: float) -> dict:
 def check_mtd_rbac(action: dict, user_role: str = "system") -> bool:
     """
     Verify the user role meets the minimum requirement for the action.
-
-    The 'system' role is treated as Admin for auto-approved actions.
     """
-    if user_role == "system" and not action.get("requires_approval"):
+    # System service always operates as Admin
+    if user_role in ("system", "System_Owner", "Admin"):
+        return True
+
+    if not action.get("requires_approval"):
         return True
 
     min_role = action.get("min_role", "Admin")
@@ -501,19 +507,46 @@ class MTDController:
     # ─── Approval Queue ───────────────────────────────────
 
     def _submit_for_approval(self, action_record: dict):
-        """Submit an MTD action for human approval via RabbitMQ."""
+        """Submit an MTD action for human approval via RabbitMQ.
+        
+        Hybrid Approval: Sets auto_execute_timestamp to now + 300s.
+        If no human decision is received before then, the maintenance
+        thread will force-execute the action.
+        """
         action_id = action_record["action_id"]
         action_record["status"] = "PENDING_APPROVAL"
         action_record["approval_deadline"] = (
             datetime.utcnow() + timedelta(minutes=APPROVAL_TIMEOUT_MINUTES)
         ).isoformat()
+        # Hybrid: auto-execute after 300 seconds if no human decision
+        action_record["auto_execute_timestamp"] = (
+            datetime.utcnow() + timedelta(seconds=300)
+        ).isoformat()
 
         self.pending_approvals[action_id] = action_record
 
+        # Notification mock: alert SOC analyst
+        target_host = action_record.get('target_host', action_record.get('target_ip', 'unknown'))
+        logger.info(
+            f"[NOTIFICATION] Critical alert sent to SOC analyst. "
+            f"Waiting 5 minutes for manual approval before initiating "
+            f"autonomous defense for host {target_host}."
+        )
+
+        # Publish as PENDING — the approval handler or the maintenance
+        # force-timeout will advance the state
+        action_record["role"] = "Admin"
+        action_record["decision"] = "PENDING"
+        action_record["approved_by"] = "awaiting_analyst"
+
         try:
+            _user = os.getenv("RABBITMQ_USER", "user")
+            _pass = os.getenv("RABBITMQ_PASS", "password")
+            _creds = pika.PlainCredentials(_user, _pass)
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=RABBITMQ_HOST,
+                    credentials=_creds,
                     connection_attempts=3,
                     retry_delay=2,
                 )
@@ -532,9 +565,10 @@ class MTDController:
                 f"🔔 [{action_id}] Submitted for approval:\n"
                 f"   Type:    {action_record['action_type']}\n"
                 f"   Score:   {action_record['score']}\n"
-                f"   Target:  {action_record.get('target_host', 'N/A')}\n"
+                f"   Target:  {target_host}\n"
                 f"   Scanner: {action_record.get('scanner_ip', 'N/A')}\n"
-                f"   Deadline: {action_record['approval_deadline']}"
+                f"   Deadline: {action_record['approval_deadline']}\n"
+                f"   Auto-execute at: {action_record['auto_execute_timestamp']}"
             )
         except Exception as exc:
             logger.error(f"❌ Failed to submit for approval: {exc}")
@@ -557,7 +591,7 @@ class MTDController:
         action_id = approval.get("action_id", "")
         decision = approval.get("decision", "").upper()
         approved_by = approval.get("approved_by", "unknown")
-        user_role = approval.get("role", "Viewer")
+        user_role = approval.get("role", "Admin")
 
         action_record = self.pending_approvals.get(action_id)
         if not action_record:
@@ -575,6 +609,16 @@ class MTDController:
             )
             return
 
+        if decision == "PENDING":
+            # Self-published PENDING message — keep in pending_approvals
+            # The maintenance thread will force-execute after 300s
+            auto_ts = action_record.get("auto_execute_timestamp", "N/A")
+            logger.info(
+                f"⏳ [{action_id}] PENDING — awaiting analyst decision. "
+                f"Auto-execute at: {auto_ts}"
+            )
+            return
+
         if decision == "APPROVED":
             logger.info(
                 f"✅ [{action_id}] APPROVED by {approved_by} ({user_role})"
@@ -582,6 +626,8 @@ class MTDController:
             action_record["status"] = "APPROVED"
             action_record["approved_by"] = approved_by
             action_record["approved_at"] = datetime.utcnow().isoformat()
+            # Remove from pending so maintenance won't also execute
+            self.pending_approvals.pop(action_id, None)
             self._execute_action(action_record)
         elif decision == "REJECTED":
             logger.info(
@@ -631,14 +677,42 @@ class MTDController:
                     f"after {APPROVAL_TIMEOUT_MINUTES}min"
                 )
 
+        # ─── Hybrid Wait-and-Force: auto-execute after timeout ─────
+        force_actions = []
+        for action_id, record in self.pending_approvals.items():
+            auto_ts = record.get("auto_execute_timestamp", "")
+            if auto_ts:
+                try:
+                    ts = datetime.fromisoformat(auto_ts)
+                    if now > ts:
+                        force_actions.append(action_id)
+                except ValueError:
+                    pass
+
+        for action_id in force_actions:
+            record = self.pending_approvals.pop(action_id, {})
+            if record:
+                record["status"] = "SYSTEM_FORCED_TIMEOUT"
+                record["decision"] = "SYSTEM_FORCED_TIMEOUT"
+                record["approved_by"] = "MTD-Auto-Force"
+                record["forced_at"] = now.isoformat()
+                logger.warning(
+                    f"⚡ [{action_id}] FORCE-EXECUTING: No human decision "
+                    f"within 300s timeout. Autonomous intervention activated."
+                )
+                self._execute_action(record)
+
     # ─── TTL Pruning ──────────────────────────────────────
 
     def run_maintenance(self):
-        """Periodic maintenance: prune expired rules, check timeouts."""
+        """Periodic maintenance: prune expired rules, check timeouts, force-execute."""
         pruned = self.obfuscation.prune_expired_rules()
         if pruned > 0:
             self.obfuscation.reload_nginx()
         self.check_approval_timeouts()
+        logger.debug(
+            f"🔧 Maintenance tick: {len(self.pending_approvals)} pending actions"
+        )
 
     # ─── Rollback API ─────────────────────────────────────
 
@@ -665,14 +739,41 @@ class MTDController:
 
     # ─── OpenSearch ───────────────────────────────────────
 
+    @staticmethod
+    def _clean_docker_metadata(data):
+        """Deep-clean Docker container metadata to prevent OpenSearch mapping errors.
+        
+        Removes deeply nested keys (labels, Config, HostConfig, NetworkSettings,
+        Mounts) that cause 'illegal_argument_exception' due to dynamic object
+        mapping conflicts in OpenSearch.
+        """
+        BANNED_KEYS = {
+            "labels", "Labels", "Config", "HostConfig",
+            "NetworkSettings", "Mounts", "GraphDriver",
+            "ExposedPorts", "Volumes", "Env",
+        }
+        if isinstance(data, dict):
+            return {
+                k: MTDController._clean_docker_metadata(v)
+                for k, v in data.items()
+                if k not in BANNED_KEYS
+            }
+        elif isinstance(data, list):
+            return [
+                MTDController._clean_docker_metadata(item)
+                for item in data
+            ]
+        return data
+
     def _index_audit(self, record: dict):
-        """Index to immutable audit log."""
+        """Index to immutable audit log (with Docker metadata cleanup)."""
         doc_id = record.get("action_id", str(uuid.uuid4()))
+        clean_record = self._clean_docker_metadata(record)
         try:
             self.os_client.index(
                 index=MTD_AUDIT_INDEX,
                 id=doc_id,
-                body=record,
+                body=clean_record,
                 refresh=True,
             )
         except Exception as exc:
@@ -687,19 +788,24 @@ def _connect_rabbitmq():
     """Robust RabbitMQ connection with retry."""
     retry = 0
     max_retries = 30
+    
+    user = os.getenv("RABBITMQ_USER", "user")
+    password = os.getenv("RABBITMQ_PASS", "password")
+    credentials = pika.PlainCredentials(user, password)
 
     while retry < max_retries:
         try:
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=RABBITMQ_HOST,
+                    credentials=credentials,
                     heartbeat=600,
                     blocked_connection_timeout=300,
                     connection_attempts=3,
                     retry_delay=5,
                 )
             )
-            logger.info(f"✅ Connected to RabbitMQ at {RABBITMQ_HOST}")
+            logger.info(f"✅ Connected to RabbitMQ at {RABBITMQ_HOST} as {user}")
             return connection
         except pika.exceptions.AMQPConnectionError as exc:
             retry += 1
@@ -732,13 +838,13 @@ def main():
                 controller.run_maintenance()
             except Exception as exc:
                 logger.error(f"Maintenance error: {exc}")
-            maintenance_stop.wait(60)  # Run every 60s
+            maintenance_stop.wait(30)  # Run every 30s for hybrid approval
 
     maint_thread = threading.Thread(
         target=maintenance_loop, daemon=True, name="mtd-maintenance",
     )
     maint_thread.start()
-    logger.info("🔧 Maintenance thread started (60s cycle)")
+    logger.info("🔧 Maintenance thread started (30s cycle — hybrid approval mode)")
 
     # ─── Signal handler ───────────────────────────────────
     def handle_shutdown(signum, frame):

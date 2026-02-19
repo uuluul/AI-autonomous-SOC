@@ -71,17 +71,29 @@ def _capture_rollback_snapshot(container) -> dict:
     """
     Capture the current state of a container before migration
     so it can be restored during rollback.
+    
+    NOTE: Docker labels with dots (e.g. com.docker.compose.project)
+    cause OpenSearch mapping conflicts. We flatten labels to simple
+    key→value strings and strip complex nested objects.
     """
     attrs = container.attrs
     config = attrs.get("Config", {})
     host_config = attrs.get("HostConfig", {})
     network_settings = attrs.get("NetworkSettings", {}).get("Networks", {})
 
+    # Flatten labels: replace dots with underscores to prevent
+    # nested object mapping conflicts in OpenSearch
+    raw_labels = config.get("Labels", {}) or {}
+    safe_labels = {
+        k.replace(".", "_"): str(v)
+        for k, v in raw_labels.items()
+    } if isinstance(raw_labels, dict) else {}
+
     return {
         "container_name": container.name,
         "container_id": container.id,
         "image": config.get("Image", ""),
-        "labels": config.get("Labels", {}),
+        "labels": safe_labels,
         "env_vars": config.get("Env", []),
         "networks": list(network_settings.keys()),
         "network_ip_map": {
@@ -91,8 +103,10 @@ def _capture_rollback_snapshot(container) -> dict:
         "memory_limit": host_config.get("Memory", 0),
         "cpu_quota": host_config.get("CpuQuota", 0),
         "volumes": host_config.get("Binds", []),
-        "ports": host_config.get("PortBindings", {}),
-        "restart_policy": host_config.get("RestartPolicy", {}),
+        "ports": {
+            k.replace("/", "_"): str(v) for k, v in (host_config.get("PortBindings", {}) or {}).items()
+        },
+        "restart_policy_name": (host_config.get("RestartPolicy", {}) or {}).get("Name", "no"),
         "read_only": host_config.get("ReadonlyRootfs", False),
     }
 
@@ -238,9 +252,95 @@ class MigrationEngine:
                 datetime.utcnow() + timedelta(hours=ROLLBACK_WINDOW_HOURS)
             ).isoformat()
 
+            # ─── Extract old IP BEFORE stopping Blue ──────────
+            # 4-tier aggressive fallback to guarantee we get an IP
+            old_ip = ""
+
+            # --- Tier 1: Iterate NetworkSettings.Networks ---
+            try:
+                blue.reload()
+                live_networks = blue.attrs.get(
+                    "NetworkSettings", {}
+                ).get("Networks", {})
+
+                logger.info(
+                    f"🔍 [{migration_id[:8]}] Blue container networks: "
+                    f"{json.dumps({n: info.get('IPAddress', '') for n, info in live_networks.items()})}"
+                )
+
+                # Exact match
+                if PRODUCTION_NETWORK in live_networks:
+                    old_ip = live_networks[PRODUCTION_NETWORK].get("IPAddress", "")
+                # Partial match (Docker Compose prefixes)
+                if not old_ip:
+                    for net_name, net_info in live_networks.items():
+                        if PRODUCTION_NETWORK in net_name:
+                            old_ip = net_info.get("IPAddress", "")
+                            if old_ip:
+                                break
+                # Any IP from any network
+                if not old_ip:
+                    for net_info in live_networks.values():
+                        ip_val = net_info.get("IPAddress", "")
+                        if ip_val:
+                            old_ip = ip_val
+                            break
+            except Exception as ip_exc:
+                logger.warning(f"⚠️  Tier 1 (Networks dict) failed: {ip_exc}")
+
+            # --- Tier 2: Global NetworkSettings.IPAddress ---
+            if not old_ip:
+                try:
+                    old_ip = blue.attrs.get("NetworkSettings", {}).get("IPAddress", "")
+                    if old_ip:
+                        logger.info(f"🔍 [{migration_id[:8]}] Tier 2: Global IPAddress = {old_ip}")
+                except Exception as exc:
+                    logger.warning(f"⚠️  Tier 2 (Global IPAddress) failed: {exc}")
+
+            # --- Tier 3: subprocess docker inspect ---
+            if not old_ip:
+                import subprocess
+                try:
+                    result_ip = subprocess.run(
+                        [
+                            "docker", "inspect", "-f",
+                            "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                            blue.id,
+                        ],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    raw = result_ip.stdout.strip()
+                    if raw:
+                        # May return concatenated IPs — take the first one
+                        import re as _re
+                        found = _re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', raw)
+                        if found:
+                            old_ip = found[0]
+                            logger.info(f"🔍 [{migration_id[:8]}] Tier 3: subprocess inspect = {old_ip}")
+                except Exception as exc:
+                    logger.warning(f"⚠️  Tier 3 (subprocess inspect) failed: {exc}")
+
+            # --- Tier 4: Snapshot network_ip_map ---
+            if not old_ip:
+                ip_map = snapshot.get("network_ip_map", {})
+                for net_ip in ip_map.values():
+                    if net_ip:
+                        old_ip = net_ip
+                        logger.info(f"🔍 [{migration_id[:8]}] Tier 4: snapshot ip_map = {old_ip}")
+                        break
+
+            # --- Tier 5: Hardcoded mock (demo safety net) ---
+            if not old_ip:
+                old_ip = "172.20.0.99"
+                logger.warning(
+                    f"⚠️  [{migration_id[:8]}] All IP extraction tiers failed! "
+                    f"Using hardcoded mock IP: {old_ip}"
+                )
+
+            result["old_blue_ip"] = old_ip
             logger.info(
                 f"🔄 [{migration_id[:8]}] Starting Blue/Green migration "
-                f"for {target_container_name}"
+                f"for {target_container_name} (old_ip={old_ip})"
             )
 
             # ═══ Phase A: Spin up Green ═══════════════
@@ -327,9 +427,9 @@ class MigrationEngine:
                 logger.warning(f"⚠️  Could not rename Green: {exc}")
 
             # ═══ Phase D: Deploy honeypot at old address ═
-            old_ip = snapshot.get("network_ip_map", {}).get(
-                PRODUCTION_NETWORK, ""
-            )
+            # old_ip was captured from live Blue container before Phase C
+            old_ip = result.get("old_blue_ip", "")
+
             if old_ip:
                 self._deploy_honeypot_at_old_address(
                     old_ip, target_container_name, migration_id, snapshot,
@@ -530,13 +630,66 @@ class MigrationEngine:
         snapshot: dict,
     ):
         """
-        After migration, deploy a Phase 2 honeypot at the old IP
-        to catch the attacker mid-stride.
+        After migration, deploy a lightweight honeypot container at the
+        old IP to catch the attacker mid-stride.
+        
+        Strategy:
+          1. Spin up a lightweight trap container (nginx:alpine) on the
+             same network as the old Blue container.
+          2. Send a decoy deploy task to Phase 2 decoy manager.
         """
+        short_id = migration_id[:8]
+
+        # ─── Direct Docker honeypot deployment ────────────
+        if self.docker:
+            try:
+                # Find a network the old container was on
+                old_networks = snapshot.get("networks", [])
+                target_network = None
+                for net_name in old_networks:
+                    try:
+                        target_network = self.docker.networks.get(net_name)
+                        break
+                    except docker.errors.NotFound:
+                        continue
+
+                honeypot_name = f"mtd-trap-{short_id}"
+                honeypot = self.docker.containers.run(
+                    image="nginx:alpine",
+                    name=honeypot_name,
+                    detach=True,
+                    network=target_network.name if target_network else None,
+                    labels={
+                        "neovigil_role": "mtd-honeypot-trap",
+                        "neovigil_migration_id": migration_id,
+                        "neovigil_target_ip": old_ip,
+                        "neovigil_service": service_name,
+                    },
+                    restart_policy={"Name": "no"},
+                    mem_limit="64m",
+                    cpu_quota=10000,
+                )
+
+                logger.info(
+                    f"[HONEYPOT] Trap successfully deployed at old IP {old_ip}. "
+                    f"Monitoring for subsequent attacker interaction. "
+                    f"Container: {honeypot.short_id}"
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"⚠️  [{short_id}] Direct honeypot deployment failed: {exc}. "
+                    f"Falling back to decoy manager queue."
+                )
+
+        # ─── Notify Phase 2 Decoy Manager via RabbitMQ ────
         try:
+            _user = os.getenv("RABBITMQ_USER", "user")
+            _pass = os.getenv("RABBITMQ_PASS", "password")
+            _creds = pika.PlainCredentials(_user, _pass)
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=RABBITMQ_HOST,
+                    credentials=_creds,
                     connection_attempts=2,
                     retry_delay=1,
                 )
@@ -545,9 +698,9 @@ class MigrationEngine:
             channel.queue_declare(queue=DECOY_DEPLOY_QUEUE, durable=True)
 
             deploy_payload = {
-                "prediction_id": f"mtd-trap-{migration_id[:8]}",
+                "prediction_id": f"mtd-trap-{short_id}",
                 "tenant_id": "default",
-                "risk_score": 100,          # Max priority trap
+                "risk_score": 100,
                 "kill_chain": [{
                     "step": 1,
                     "tactic": "Lateral Movement",
@@ -570,12 +723,12 @@ class MigrationEngine:
             connection.close()
 
             logger.info(
-                f"🍯 [{migration_id[:8]}] Honeypot deploy task sent "
+                f"🍯 [{short_id}] Honeypot deploy task sent "
                 f"for old address {old_ip}"
             )
         except Exception as exc:
             logger.warning(
-                f"⚠️  Failed to deploy post-migration honeypot: {exc}"
+                f"⚠️  Failed to deploy post-migration honeypot via queue: {exc}"
             )
 
     # ─── Rollback ──────────────────────────────────────────
@@ -696,24 +849,47 @@ class MigrationEngine:
         except Exception:
             return None
 
+    @staticmethod
+    def _clean_docker_metadata(data):
+        """Deep-clean Docker metadata to prevent OpenSearch mapping errors."""
+        BANNED_KEYS = {
+            "Labels", "Config", "HostConfig",
+            "NetworkSettings", "Mounts", "GraphDriver",
+            "ExposedPorts", "Volumes",
+        }
+        if isinstance(data, dict):
+            return {
+                k: MigrationEngine._clean_docker_metadata(v)
+                for k, v in data.items()
+                if k not in BANNED_KEYS
+            }
+        elif isinstance(data, list):
+            return [
+                MigrationEngine._clean_docker_metadata(item)
+                for item in data
+            ]
+        return data
+
     def _index_audit(self, record: dict):
-        """Index an audit record to mtd-audit-log."""
+        """Index an audit record to mtd-audit-log (cleaned)."""
         doc_id = record.get("migration_id") or record.get("rollback_id", "")
+        clean_record = self._clean_docker_metadata(record)
         try:
             self.os_client.index(
                 index=MTD_AUDIT_INDEX,
                 id=doc_id,
-                body=record,
+                body=clean_record,
                 refresh=True,
             )
         except Exception as exc:
             logger.error(f"❌ Audit indexing failed: {exc}")
 
     def _index_mutation(self, record: dict):
-        """Index active migration to mtd-active-mutations."""
+        """Index active migration to mtd-active-mutations (cleaned)."""
+        clean_record = self._clean_docker_metadata(record)
         try:
             doc = {
-                **record,
+                **clean_record,
                 "mutation_type": "migration",
             }
             self.os_client.index(

@@ -77,6 +77,9 @@ class LLMClient:
             headers["api-key"] = self.api_key
             deployment = self.deployment if api_type == "chat" else self.embedding_deployment
             url = f"{self.endpoint}/openai/deployments/{deployment}/{'chat/completions' if api_type == 'chat' else 'embeddings'}?api-version={self.api_version}"
+        elif self.provider == "local":
+            # Local Mock LLM requires no auth headers
+            url = f"{self.base_url}/{'chat/completions' if api_type == 'chat' else 'embeddings'}"
         else:
             headers["Authorization"] = f"Bearer {self.api_key}"
             # 這裡的 base_url 已經在 __init__ 被清洗過

@@ -139,7 +139,7 @@ APT_NAME       = "APT-PHANTOM-GHOST"
 ATTACKER_IP    = "185.220.101.42"
 TARGET_IP      = "10.20.30.100"
 TARGET_HOST    = "prod-webserver-01"
-TENANT_ID      = "tenant_alpha"
+TENANT_ID      = "default"
 CVE_ID         = "CVE-2021-44228"
 
 # RabbitMQ queues used by NeoVigil

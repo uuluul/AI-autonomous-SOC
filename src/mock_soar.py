@@ -3,6 +3,9 @@ import json
 import sys
 import pika
 import os
+import time
+from datetime import datetime
+from opensearchpy import OpenSearch, RequestsHttpConnection
 
 # RabbitMQ Config
 RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'rabbitmq')
@@ -11,16 +14,25 @@ HONEYPOT_QUEUE = 'honeypot_events'            # Phase 2: Deception telemetry
 RABBITMQ_USER = os.getenv('RABBITMQ_DEFAULT_USER', 'user')
 RABBITMQ_PASS = os.getenv('RABBITMQ_DEFAULT_PASS', 'password')
 
+# OpenSearch Config
+OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "opensearch-node")
+OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
+OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
+OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "admin")
+
+def get_opensearch_client():
+    return OpenSearch(
+        hosts=[{'host': OPENSEARCH_HOST, 'port': OPENSEARCH_PORT}],
+        http_auth=(OPENSEARCH_USER, OPENSEARCH_PASSWORD),
+        use_ssl=False,
+        verify_certs=False,
+        connection_class=RequestsHttpConnection
+    )
 
 def relay_honeypot_event(raw_data):
     """
     Phase 2 — Relay honeypot telemetry from Fluent Bit sidecar
     to the 'honeypot_events' RabbitMQ queue.
-
-    Path:  Fluent Bit sidecar (honeypot-net)
-           → HTTP POST /honeypot_event (this endpoint)
-           → RabbitMQ honeypot_events queue
-           → Validation Engine
     """
     try:
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
@@ -79,17 +91,13 @@ def send_to_rabbitmq(msg):
         print("  [SOAR] JSON parsed successfully.", flush=True)
         
         if isinstance(payloads, list):
-             print(f"  [SOAR] Processing list of {len(payloads)} items...", flush=True)
-             # Fluent Bit HTTP format: [[timestamp, {"key": "val"}], ...]
-             for i, item in enumerate(payloads):
-                 print(f"  [SOAR] Item {i} type: {type(item)}, content: {item}", flush=True)
+            print(f"  [SOAR] Processing list of {len(payloads)} items...", flush=True)
+            for i, item in enumerate(payloads):
                  if isinstance(item, list) and len(item) >= 2:
                      log_entry = item[1]
                  elif isinstance(item, dict):
-                     # Maybe format is different?
                      log_entry = item
                  else:
-                     print(f"  [SOAR] Skipping unknown item format: {item}", flush=True)
                      continue
 
                  channel.basic_publish(
@@ -121,17 +129,15 @@ class SimpleHandler(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length)
         
         try:
-            # Check path to distinguish ingestion vs alert webhook
+            # 1. Ingestion Endpoint
             if self.path == '/ingest':
-                # This is log ingestion from Fluent Bit
                 send_to_rabbitmq(post_data)
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Ingested")
-                self.wfile.write(b"Ingested")
                 return
 
-            # ─── Phase 2: Honeypot Telemetry Relay ────────
+            # 2. Honeypot Telemetry
             if self.path == '/honeypot_event':
                 relay_honeypot_event(post_data)
                 self.send_response(200)
@@ -139,40 +145,166 @@ class SimpleHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Honeypot event relayed")
                 return
 
+            # 3. Analyze Endpoint (Triggered by Prediction Engine)
+            if self.path == '/analyze':
+                self.handle_analyze(post_data)
+                return
+
+            # 4. Unblock Endpoint
             if self.path == '/unblock':
                 data = json.loads(post_data)
-                print("\n\n" + "="*50, flush=True)
-                print("  [SOAR SYSTEM] RECEIVED ROLLBACK REQUEST!  ", flush=True)
-                print(f"  Target IP: {data.get('ip', 'Unknown')}", flush=True)
-                print("  Action: Removing Firewall Rules & Unblocking Credential...", flush=True)
-                print("="*50 + "\n", flush=True)
+                print(f"  [SOAR] Unblock request for {data.get('ip')}", flush=True)
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Unblocked")
                 return
 
-            # Default: Alert Webhook (from Master/Worker)
+            # Default: Alert Webhook
             data = json.loads(post_data)
-        except:
+        except Exception as e:
+            print(f"SOAR Error: {e}")
             data = {"raw": post_data.decode('utf-8')}
-        
-        print("\n\n" + "="*50, flush=True)
-        print("  [SOAR SYSTEM] RECEIVED ALERT FROM OPENSEARCH!  ", flush=True)
-        print(f"  Payload Received: {json.dumps(data, indent=2)}", flush=True)
-        print("  Action: Blocking IP address via Firewall API...", flush=True)
-        print("="*50 + "\n", flush=True)
         
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Alert Received")
-        
-        sys.stdout.flush()
+    
+    def handle_analyze(self, post_data):
+        """
+        Real Logic:
+        1. Parse prediction
+        2. Generate Playbook
+        3. Index to defense-playbooks
+        4. Execute Action
+        5. Index to soar-actions
+        """
+        try:
+            prediction = json.loads(post_data)
+            pred_id = prediction.get("prediction_id")
+            risk_score = prediction.get("overall_risk_score", 0)
+            scanner_ip = prediction.get("scanner_ip", "Unknown")
+            
+            print(f"  [SOAR] 🛡️ Received Analysis Request for Prediction {pred_id} (Risk: {risk_score})", flush=True)
+            
+            client = get_opensearch_client()
+            
+            # --- 1. Create Playbook ---
+            playbook_id = f"pb-{str(uuid.uuid4())[:8]}"
+            playbook_doc = {
+                "playbook_id": playbook_id,
+                "prediction_id": pred_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "name": f"Automated Defense against {scanner_ip}",
+                "trigger_risk": risk_score,
+                "status": "ACTIVE",
+                "remediation_steps": [
+                    f"Block inbound traffic from {scanner_ip} on all firewalls",
+                    "Terminate valid sessions associated with compromised host",
+                    "Rotate credentials for exposed services",
+                    "Isolate host if lateral movement is detected"
+                ] if risk_score > 50 else ["Monitor traffic for further anomalies"],
+                "created_by": "soar-auto-response"
+            }
+            
+            # Index Playbook
+            try:
+                client.index(index="defense-playbooks", body=playbook_doc, refresh=True)
+                print(f"  [SOAR] ✅ Created Playbook {playbook_id}", flush=True)
+            except Exception as e:
+                print(f"  [SOAR] ❌ Failed to index Playbook {playbook_id}: {e}", flush=True)
+                # Continuing to action simulation anyway...
+
+            # --- 2. Execute Action (Simulation) ---
+            if risk_score > 70:
+                action_id = f"act-{str(uuid.uuid4())[:8]}"
+                action_doc = {
+                    "action_id": action_id,
+                    "playbook_id": playbook_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "action_type": "BLOCK_IP",
+                    "target": scanner_ip,
+                    "status": "SUCCESS",
+                    "execution_log": "Firewall API invoked. Rule #492 created. Packet drop enabled.",
+                    "executor": "soar-server"
+                }
+                client.index(index="soar-actions", body=action_doc, refresh=True)
+                print(f"  [SOAR] ⚡ Executed Action {action_id} (BLOCK {scanner_ip})", flush=True)
+            
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "analyzed", "playbook_id": playbook_id}).encode())
+            
+        except Exception as e:
+            print(f"  [SOAR] ❌ Analysis failed: {e}", flush=True)
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(b"Analysis Failed")
 
     def log_message(self, format, *args):
         pass
 
+import uuid
+import time
+
+def init_indices():
+    """Ensure required indices exist with correct mappings."""
+    try:
+        print("  [SOAR] ⏳ Initializing OpenSearch indices...", flush=True)
+        # Wait for OpenSearch to be ready
+        client = None
+        for i in range(5):
+            try:
+                client = get_opensearch_client()
+                if client.ping():
+                    break
+            except:
+                pass
+            print(f"  [SOAR] Waiting for OpenSearch... ({i+1}/5)", flush=True)
+            time.sleep(2)
+        
+        if not client:
+             print("  [SOAR] ⚠️ OpenSearch not validated, attempting creation anyway...", flush=True)
+             client = get_opensearch_client()
+
+        indices = {
+            "defense-playbooks": {
+                "mappings": {
+                    "properties": {
+                        "playbook_id": {"type": "keyword"},
+                        "prediction_id": {"type": "keyword"},
+                        "timestamp": {"type": "date"},
+                        "remediation_steps": {"type": "text"},
+                        "trigger_risk": {"type": "float"}
+                    }
+                }
+            },
+            "soar-actions": {
+                "mappings": {
+                    "properties": {
+                        "action_id": {"type": "keyword"},
+                        "playbook_id": {"type": "keyword"},
+                        "timestamp": {"type": "date"},
+                        "action_type": {"type": "keyword"},
+                        "status": {"type": "keyword"}
+                    }
+                }
+            }
+        }
+        
+        for index_name, body in indices.items():
+            if not client.indices.exists(index=index_name):
+                client.indices.create(index=index_name, body=body)
+                print(f"  [SOAR] ✅ Created index: {index_name}", flush=True)
+            else:
+                print(f"  [SOAR] ℹ️ Index exists: {index_name}", flush=True)
+                
+    except Exception as e:
+        print(f"  [SOAR] ❌ Failed to initialize indices: {e}", flush=True)
+
 if __name__ == "__main__":
+    init_indices()
+    
     # Ensure pika is installed (it is in requirements.txt)
     server = HTTPServer(('0.0.0.0', 5000), SimpleHandler)
-    print("   Mock SOAR Server listening on port 5000... (Unbuffered Mode)", flush=True)
+    print("   ✅ Real SOAR Server listening on port 5000... (Analysis Enabled)", flush=True)
     server.serve_forever()

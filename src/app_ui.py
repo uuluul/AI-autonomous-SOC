@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import uuid
+import time
 import pandas as pd
 import pydeck as pdk
 import hashlib
@@ -48,10 +49,35 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ================= 登入驗證模組 =================
-# ================= 登入驗證模組 (RBAC Enabled) =================
+# ================= 登入驗證模組 (RBAC Enabled + 5min Persistence) =================
+@st.cache_resource
+def get_session_store():
+    """Global session store for persistence across reloads."""
+    return {} # format: {token: {"expiry": datetime, "role": str, "user": str}}
+
 def check_password():
     """回傳 True 代表登入成功"""
     
+    sessions = get_session_store()
+    params = st.query_params # Streamlit 1.30+
+    
+    # 1. Check for Active Session Token in URL
+    token = params.get("auth_token", None)
+    if token and token in sessions:
+        session_data = sessions[token]
+        if datetime.now() < session_data["expiry"]:
+            # Restore Session
+            st.session_state["password_correct"] = True
+            st.session_state["logged_in_user"] = session_data["user"]
+            st.session_state["user_role"] = session_data["role"]
+            st.session_state["session_id"] = str(uuid.uuid4()) # New ID for this run, but same auth
+            # Extend expiry on activity? Optional. Let's keep strict 5 min for security or refresh it.
+            # sessions[token]["expiry"] = datetime.now() + timedelta(minutes=5) 
+            return True
+        else:
+            # Expired
+            del sessions[token]
+
     def password_entered():
         """檢查使用者輸入的帳密"""
         correct_user = os.getenv("UI_USERNAME", "admin")
@@ -62,8 +88,20 @@ def check_password():
             st.session_state["password_correct"] = True
             st.session_state["logged_in_user"] = st.session_state["username"]
             # Assign Role based on Sidebar Selection (Mock Auth)
-            st.session_state["user_role"] = st.session_state.get("selected_role_login", "Viewer")
+            role = st.session_state.get("selected_role_login", "Viewer")
+            st.session_state["user_role"] = role
             st.session_state["session_id"] = str(uuid.uuid4())
+            
+            # Generate Persistent Token (5 Minutes)
+            new_token = str(uuid.uuid4())
+            expiry = datetime.now() + timedelta(minutes=5)
+            sessions[new_token] = {
+                "expiry": expiry,
+                "role": role,
+                "user": st.session_state["username"]
+            }
+            st.query_params["auth_token"] = new_token
+            
             if "password" in st.session_state: del st.session_state["password"]  
         else:
             st.session_state["password_correct"] = False
@@ -213,7 +251,8 @@ def get_real_soc_data(tenant_id="All"):
                     "vulnerabilities": src.get("vulnerabilities", []),
                     "summary": src.get("summary", ""),
                     "message": src.get("message", ""),
-                    "file_path": src.get("filename", "")
+                    "file_path": src.get("filename", ""),
+                    "telemetry_source": src.get("telemetry_source", "unknown")
                 })
         return pd.DataFrame(data)
     except:
@@ -254,6 +293,32 @@ def get_related_reports(indicators):
         return list(related_files)
     except Exception as e:
         return []
+
+def get_predictions(tenant_id="All"):
+    """從 OpenSearch 撈取攻擊路徑預測 (Adversarial Engine Output)"""
+    client = get_opensearch_client()
+    query = {
+        "query": {"match_all": {}},
+        "sort": [{"timestamp": {"order": "desc"}}],
+        "size": 20
+    }
+    
+    if tenant_id != "All":
+        # 如果有 tenant 欄位則過濾，沒有則全撈 (預設 mock 資料可能沒這欄位)
+        pass 
+
+    try:
+        response = client.search(index="attack-path-predictions", body=query)
+        hits = response['hits']['hits']
+        data = [hit['_source'] for hit in hits]
+        # 轉換 nested 欄位以便顯示
+        for d in data:
+            if 'prediction' in d and 'predicted_kill_chain' in d['prediction']:
+                d['kill_chain_summary'] = json.dumps(d['prediction']['predicted_kill_chain'], indent=2)
+                d['confidence'] = d['prediction'].get('confidence', 'N/A')
+        return pd.DataFrame(data)
+    except Exception as e:
+        return pd.DataFrame()
 
 def get_enriched_alerts(tenant_id="All"):
     """從 OpenSearch 撈取 CMDB 豐富化後的警報資料"""
@@ -303,20 +368,40 @@ role = st.session_state.get("user_role", "Viewer")
 st.sidebar.title("🛡️ NeoVigil SOC")
 st.sidebar.info(f"👤 **User**: {st.session_state.get('logged_in_user')}\n🎭 **Role**: {role}")
 
-# --- Multi-Tenancy Selector ---
+# --- Multi-Tenancy Selector (Persistent) ---
 st.sidebar.markdown("---")
-# Only Admin/System Owner should see "All"? For simulation, we allow selection.
 tenant_options = ["All", "tenant_alpha", "tenant_beta", "default"]
-selected_tenant = st.sidebar.selectbox("🏢 Active Tenant", tenant_options, index=0)
+
+# Initialize Tenant State
+if "selected_tenant_key" not in st.session_state:
+    st.session_state["selected_tenant_key"] = tenant_options[0]
+
+def update_tenant():
+    st.session_state["selected_tenant_key"] = st.session_state.active_tenant_widget
+
+# Tenant Index Logic
+try:
+    tenant_index = tenant_options.index(st.session_state["selected_tenant_key"])
+except ValueError:
+    tenant_index = 0
+
+selected_tenant = st.sidebar.selectbox(
+    "🏢 Active Tenant", 
+    tenant_options, 
+    index=tenant_index,
+    key="active_tenant_widget",
+    on_change=update_tenant
+)
+
+
 
 if st.sidebar.button("Logout"):
     st.session_state["password_correct"] = False
     st.rerun()
 
-# --- Dynamic Navigation based on Role ---
+# --- Persistent Navigation Logic ---
+# Define Options
 nav_options = ["🚨 Internal Threat Monitor (SOC)", "📈 Enriched Alerts Dashboard", "🕸️ Threat Graph", "📚 Knowledge Base"]
-
-# Restricted Pages
 if check_permission("REVIEW_REPORT"):
     nav_options.append("🔍 CTI Report Review")
 if check_permission("VIEW_AUDIT"):
@@ -324,12 +409,103 @@ if check_permission("VIEW_AUDIT"):
 nav_options.append("🎯 Predictive Threat Map")
 nav_options.append("🛡️ Moving Target Defense")
 
-page = st.sidebar.radio("Navigation", nav_options)
+# Initialize Navigation State
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = nav_options[0]
+
+def update_nav():
+    st.session_state["current_page"] = st.session_state.nav_radio_widget
+
+# Calculate Index Safely
+try:
+    current_idx = nav_options.index(st.session_state["current_page"])
+except ValueError:
+    current_idx = 0
+    # Fallback if page access lost
+    st.session_state["current_page"] = nav_options[0]
+
+page = st.sidebar.radio(
+    "Navigation", 
+    nav_options, 
+    index=current_idx, 
+    key="nav_radio_widget",
+    on_change=update_nav
+)
 
 ## --- 1. SOC Dashboard ---
 if page == "🚨 Internal Threat Monitor (SOC)":
     st.title(f"🚨 Security Operations Center ({selected_tenant})")
+
+    # ─── Telemetry Sources Dynamic Logic ───────────────────────
+    
+    # 1. Fetch Alert Data (Moved Up for Status Check)
     df = get_real_soc_data(selected_tenant)
+    
+    # 2. Determine Status
+    status_endpoint = "Active"
+    status_network = "Active"
+    status_identity = "Active"
+    status_deception = "Active"
+    
+    if not df.empty:
+        # Filter for High/Critical Severity
+        critical_alerts = df[df['severity'].isin(['High', 'Critical'])]
+        
+        if not critical_alerts[critical_alerts['telemetry_source'] == 'sysmon'].empty:
+            status_endpoint = "UNDER ATTACK"
+            
+        if not critical_alerts[critical_alerts['telemetry_source'] == 'suricata'].empty:
+            status_network = "UNDER ATTACK"
+            
+        if not critical_alerts[critical_alerts['telemetry_source'] == 'windows_ad'].empty:
+            status_identity = "UNDER ATTACK"
+
+    # 3. Check Deception (Honeypot) - Query separate index
+    try:
+        os_client = get_opensearch_client()
+        h_query = {"size": 1, "query": {"match_all": {}}}
+        
+        if selected_tenant != "All":
+             h_query["query"] = {"term": {"tenant_id": selected_tenant}}
+             
+        if os_client.indices.exists(index="honeypot-telemetry"):
+            h_res = os_client.search(index="honeypot-telemetry", body=h_query)
+            if h_res['hits']['hits']:
+                status_deception = "UNDER ATTACK"
+    except Exception:
+        pass
+
+    st.markdown("#### 📡 Active Telemetry Sources")
+    
+    def render_telemetry_card(title, subtitle, status):
+        is_attack = (status != "Active")
+        icon = "🚨" if is_attack else "🟢"
+        status_text = "🚨 UNDER ATTACK" if is_attack else "🟢 Active"
+        
+        # Dynamic Styling
+        bg_color = "linear-gradient(135deg, #4a1c1c, #1f0a0a)" if is_attack else "linear-gradient(135deg, #1a1a2e, #16213e)"
+        border_color = "#ff4b4b" if is_attack else "#0f3460"
+        text_color = "#ff4b4b" if is_attack else "#00d4aa"
+        
+        html = f"""
+        <div style="background:{bg_color};
+            padding:16px;border-radius:12px;text-align:center;
+            border:1px solid {border_color};box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+            <p style="margin:0;font-size:28px;">{icon}</p>
+            <p style="margin:4px 0 0;font-weight:700;color:#e0e0e0;font-size:14px;">{title}</p>
+            <p style="margin:2px 0;color:{text_color};font-size:11px;">{subtitle}</p>
+            <p style="margin:4px 0 0;color:{text_color};font-weight:bold;font-size:12px;letter-spacing:0.5px;">{status_text}</p>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+
+    tel1, tel2, tel3, tel4 = st.columns(4)
+    with tel1: render_telemetry_card("Endpoint", "Sysmon / EDR", status_endpoint)
+    with tel2: render_telemetry_card("Network", "Suricata / NDR", status_network)
+    with tel3: render_telemetry_card("Identity", "Active Directory", status_identity)
+    with tel4: render_telemetry_card("Deception", "NeoVigil Honeypots", status_deception)
+    
+    st.markdown("")
     
     if df.empty:
         st.info("No active threats detected. (System Clean)")
@@ -358,9 +534,9 @@ if page == "🚨 Internal Threat Monitor (SOC)":
             "Germany": {"lat": 51.1657, "lon": 10.4515},
             "France": {"lat": 46.2276, "lon": 2.2137},
             "Japan": {"lat": 36.2048, "lon": 138.2529},
-            "Taiwan": {"lat": 23.6978, "lon": 120.9605}, # Source Taiwan
-            "Internal / Private": {"lat": 23.5, "lon": 121.0}, # Map internal threats to Central Taiwan (Visible Arc)
-            "Unknown": {"lat": 0, "lon": 0} # Null Island
+            "Taiwan": {"lat": 23.6978, "lon": 120.9605},
+            "Internal / Private": {"lat": 23.5, "lon": 121.0},
+            # NOTE: "Unknown" intentionally omitted — do NOT map to Null Island (0,0)
         }
 
         # 準備地圖資料 (Grouped by IP for Denoising)
@@ -375,27 +551,39 @@ if page == "🚨 Internal Threat Monitor (SOC)":
             lon = row.get('lon')
             
             if pd.isna(lat) or pd.isna(lon):
-                # Try fallback
+                # Try fallback by country name
                 fallback = COUNTRY_COORDINATES.get(country)
-                # Fallback to "Unknown" if not found but prevent total loss
-                if not fallback:
-                     fallback = COUNTRY_COORDINATES.get("Unknown")
-                
                 if fallback:
                     lat = fallback["lat"]
                     lon = fallback["lon"]
+                else:
+                    # No valid coordinates — skip this point entirely
+                    # (do NOT fall back to Null Island 0,0)
+                    continue
             
-            if lat is not None and lon is not None:
-                if ip not in map_points:
-                    map_points[ip] = {
-                        "ip": ip, 
-                        "lat": float(lat), 
-                        "lon": float(lon),
-                        "country": country,
-                        "attack_count": 0
-                    }
-                map_points[ip]["attack_count"] += 1
+            # Filter out Null Island (0,0) coordinates
+            if float(lat) == 0.0 and float(lon) == 0.0:
+                continue
+
+            if ip not in map_points:
+                map_points[ip] = {
+                    "ip": ip, 
+                    "lat": float(lat), 
+                    "lon": float(lon),
+                    "country": country,
+                    "attack_count": 0
+                }
+            map_points[ip]["attack_count"] += 1
         
+        # Default view: Taiwan / East Asia
+        default_view = pdk.ViewState(
+            latitude=23.5, 
+            longitude=121.0, 
+            zoom=2.0, 
+            pitch=0,
+            bearing=0
+        )
+
         if map_points:
             # Convert dict back to list for PyDeck
             point_data = list(map_points.values())
@@ -418,45 +606,52 @@ if page == "🚨 Internal Threat Monitor (SOC)":
                     "stroke_width": width
                 })
 
-            # 低弧度飛行路徑 (Dynamic Width by Pre-calculated field)
-            arc_layer = pdk.Layer(
-                "ArcLayer",
-                data=arc_data,
-                get_source_position="source_coords",
-                get_target_position="target_coords",
-                get_source_color=[255, 50, 50, 150], # 紅色半透明
-                get_target_color=[0, 255, 100, 150], # 綠色半透明
-                get_width="stroke_width", # Use pre-calculated field
-                pickable=True,
-                great_circle=False, # 2D 平面線條
-                get_height=0.5,
-            )
+            # Build layers only if we have valid data
+            layers = []
 
-            # ScatterplotLayer (紅點, Aggregated)
-            scatterplot_layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=point_data,
-                get_position=["lon", "lat"],
-                get_color=[255, 50, 50, 200],
-                get_radius=100000, # 半徑大小
-                pickable=True,
-            )
+            if arc_data:
+                # 低弧度飛行路徑 (Dynamic Width by Pre-calculated field)
+                arc_layer = pdk.Layer(
+                    "ArcLayer",
+                    data=arc_data,
+                    get_source_position="source_coords",
+                    get_target_position="target_coords",
+                    get_source_color=[255, 50, 50, 150], # 紅色半透明
+                    get_target_color=[0, 255, 100, 150], # 綠色半透明
+                    get_width="stroke_width", # Use pre-calculated field
+                    pickable=True,
+                    great_circle=False, # 2D 平面線條
+                    get_height=0.5,
+                )
+                layers.append(arc_layer)
+
+            if point_data:
+                # ScatterplotLayer (紅點, Aggregated)
+                scatterplot_layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=point_data,
+                    get_position=["lon", "lat"],
+                    get_color=[255, 50, 50, 200],
+                    get_radius=100000, # 半徑大小
+                    pickable=True,
+                )
+                layers.append(scatterplot_layer)
 
             # 渲染地圖
             st.pydeck_chart(pdk.Deck(
                 map_style=None,
-                initial_view_state=pdk.ViewState(
-                    latitude=20, 
-                    longitude=100, 
-                    zoom=1.2, 
-                    pitch=0,
-                    bearing=0
-                ),
-                layers=[arc_layer, scatterplot_layer],
+                initial_view_state=default_view,
+                layers=layers,
                 tooltip={"text": "Attacker: {source_ip}\nOrigin: {country}\nAttacks: {attack_count}"}
             ))
         else:
-            st.warning("Threats detected but no GeoIP data available.")
+            # No valid geo data — render clean empty map with no attack lines
+            st.pydeck_chart(pdk.Deck(
+                map_style=None,
+                initial_view_state=default_view,
+                layers=[],  # Explicitly empty — no arcs, no points
+            ))
+            st.info("✅ No geo-located threats to display. The environment appears safe.")
 
         # --- SOC Performance Metrics (Phase 2) ---
         st.divider()
@@ -482,221 +677,305 @@ if page == "🚨 Internal Threat Monitor (SOC)":
         m3.metric("False Positive Rate", "1.2%", "+0.1%")
         m4.metric("Automated Resolution", "94%", "+2%")
 
-        # --- Intelligent Remediation Engine (AI-Driven) ---
-        st.subheader("🛡️ Intelligent Remediation Engine")
-        
-        # 1. Grouping Logic
-        unique_threats = {} # Key: Identifier (CVE or Attack Type) -> Value: Threat Info
+    # ─── Helper: Query Defense Playbooks (SOAR) ───
+    # ─── Helper: Query Defense Playbooks (SOAR) ───
+    def get_defense_playbooks(size=10):
+        try:
+            client = get_opensearch_client()
+            resp = client.search(
+                index="defense-playbooks",
+                body={"query": {"match_all": {}}, "sort": [{"timestamp": {"order": "desc"}}], "size": size}
+            )
+            hits = [hit["_source"] for hit in resp["hits"]["hits"]]
+            return hits
+        except Exception:
+            # Atomic failure: return empty list, let caller handle UI
+            return []
 
-        for _, row in df.iterrows():
-            # Check for specific CVEs first (Higher Priority)
-            vulns = row.get("vulnerabilities", [])
-            if isinstance(vulns, list) and vulns:
-                for v in vulns:
-                    # Specific CVE found
-                    vid = v.get("id")
-                    if not vid: # Fallback for empty ID (Generic Remediation Case)
-                        vid = row.get("attack_type", "Unknown Threat")
-                        # USE AI PLAYBOOK for generic threats (Overwrite static JSON text)
-                        remediation_text = get_ai_remediation(vid)
-                    else:
-                        # Use CVE specific remediation
-                        remediation_text = v.get("remediation", "No remediation available.")
+    def get_soar_actions(size=10):
+        try:
+            client = get_opensearch_client()
+            resp = client.search(
+                index="soar-actions",
+                body={"query": {"match_all": {}}, "sort": [{"timestamp": {"order": "desc"}}], "size": size}
+            )
+            hits = [hit["_source"] for hit in resp["hits"]["hits"]]
+            return hits
+        except Exception:
+            return []
+
+# --- Intelligent Remediation Engine (AI-Driven) ---
+    # 1. Header Always Visible
+    st.subheader("🛡️ Intelligent Remediation Engine")
+    
+    # 2. Crash-Proof Data Fetching
+    playbooks = []
+    try:
+        playbooks = get_defense_playbooks(size=10)
+    except Exception as e:
+        st.error(f"Data Fetch Error (Playbooks): {e}")
+    
+    # 3. Debug Info (Moved Up)
+    # Using st.caption or st.code for cleaner debug, but user asked for st.write
+    st.write(f"Debug: Found {len(playbooks)} playbooks")
+
+    # 4. Forced Rendering
+    if not playbooks:
+         st.info("No playbooks found in OpenSearch.")
+    else:
+        for pb in playbooks[:5]:
+            try: # Extra safety inside loop
+                with st.expander(f"📘 Playbook: {pb.get('name', 'Unknown')} (Risk: {pb.get('trigger_risk', 'N/A')})", expanded=True):
+                    c1, c2 = st.columns([3, 1])
+                    c1.markdown(f"**ID**: `{pb.get('playbook_id', 'N/A')}`")
+                    c1.markdown(f"**Time**: {pb.get('timestamp', 'N/A')}")
                     
-                    if vid not in unique_threats:
-                        unique_threats[vid] = {
-                            "type": "CVE Exploit" if v.get("id") else "AI Anomaly",
-                            "severity": v.get("severity", "High"),
-                            "description": v.get("description", "No description available."),
-                            "remediation": remediation_text,
-                            "count": 1,
-                            "source_ips": {row.get('source_ip')} if row.get('source_ip') else set(),
-                            "confidence": row.get("confidence", 0),
-                            "rag_context": row.get("rag_context", [])
-                        }
+                    steps = pb.get("remediation_steps", [])
+                    if steps:
+                        c1.markdown("**Remediation Steps:**")
+                        for s in steps:
+                            c1.markdown(f"- {s}")
                     else:
-                        unique_threats[vid]["count"] += 1
-                        if row.get('source_ip'):
-                             if "source_ips" not in unique_threats[vid]:
-                                 unique_threats[vid]["source_ips"] = set()
-                             unique_threats[vid]["source_ips"].add(row.get('source_ip'))
-                        
-                        # Accumulate RAG Context
-                        if row.get("rag_context"):
-                             if "rag_context" not in unique_threats[vid]:
-                                 unique_threats[vid]["rag_context"] = []
-                             # Extend and deduplicate simple text
-                             for r in row.get("rag_context", []):
-                                 if r not in unique_threats[vid]["rag_context"]:
-                                     unique_threats[vid]["rag_context"].append(r)
-                        
-                    # Collect Evidence (Unified)
-                    if "evidence" not in unique_threats[vid]:
-                        unique_threats[vid]["evidence"] = set()
+                        c1.info("No specific remediation steps listed.")
+            except Exception as inner_e:
+                st.error(f"Error rendering playbook: {inner_e}")
+
+# === ROLLBACK / UNBLOCK SECTION ===
+    # 1. Header Always Visible
+    st.subheader("🛡️ Active Defense Actions (SOAR)")
+    
+    # 2. Crash-Proof Data Fetching
+    active_actions = []
+    try:
+        active_actions = get_soar_actions(size=5)
+    except Exception as e:
+         st.error(f"Data Fetch Error (Actions): {e}")
+
+    # 3. Debug Info
+    st.write(f"Debug: Found {len(active_actions)} actions") 
+    
+    # 4. Forced Rendering
+    if not active_actions:
+        st.info("No active defensive actions found.")
+    else:
+        for action in active_actions:
+            try:
+                target_ip = action.get("target", "Unknown IP")
+                action_id = action.get("action_id", "N/A")
+                action_type = action.get("action_type", "UNKNOWN")
+                
+                with st.expander(f"⚡ Action: {action_type} on {target_ip}", expanded=True):
+                    c1, c2 = st.columns([3, 1])
+                    c1.write(f"**Action ID**: `{action_id}`")
+                    c1.write(f"**Timestamp**: {action.get('timestamp')}")
+                    c1.write(f"**Log**: {action.get('execution_log')}")
                     
-                    msg = row.get('summary') or row.get('message') or "No details"
-                    fname = row.get('file_path') or row.get('related_report') or "Unknown Source"
-                    evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
-                    unique_threats[vid]["evidence"].add(evidence_str)
-            else:
-                # No CVE? Use AI Attack Type Classification (e.g., DDoS, Brute Force)
-                attack_type = row.get("attack_type", "Suspicious Activity")
-                if attack_type not in unique_threats:
-                    # Construct smart default remediation based on attack type (AI-Driven)
-                    if row.get("Mitigation"):
-                        default_remediation = row.get("Mitigation") # Use provided mitigation if available
-                    else:
-                        default_remediation = get_ai_remediation(attack_type) # Fallback to AI Playbook
-                    
-                    unique_threats[attack_type] = {
-                        "type": "Behavioral Pattern",
-                        "severity": row.get("severity", "Medium"),
-                        "description": f"AI detected {attack_type} pattern from {row.get('source_ip', 'unknown source')}.",
-                        "remediation": default_remediation,
+                    # RBAC Check for Rollback
+                    if action_type == "BLOCK_IP":
+                        if check_permission("ROLLBACK"):
+                            if c2.button("⏪ Rollback / Unblock", key=f"rb_{action_id}"):
+                                try:
+                                    # 1. Call Real SOAR Unblock
+                                    requests.post("http://soar-server:5000/unblock", json={"ip": target_ip})
+                                    
+                                    # 2. Audit Log
+                                    audit_logger.log_event(
+                                        actor=st.session_state.get("logged_in_user", "Admin"),
+                                        action="ROLLBACK_BLOCK",
+                                        target=target_ip,
+                                        status="SUCCESS",
+                                        justification="Manual Rollback requested by Analyst",
+                                        role=st.session_state.get("user_role", "Unknown"),
+                                        session_id=st.session_state.get("session_id", "N/A")
+                                    )
+                                    
+                                    # 3. Index 'UNBLOCK' action to soar-actions so history is preserved
+                                    client = get_opensearch_client()
+                                    unblock_doc = {
+                                        "action_id": f"act-{str(uuid.uuid4())[:8]}",
+                                        "timestamp": datetime.utcnow().isoformat(),
+                                        "action_type": "UNBLOCK_IP",
+                                        "target": target_ip,
+                                        "status": "SUCCESS",
+                                        "executor": st.session_state.get("logged_in_user", "Admin")
+                                    }
+                                    client.index(index="soar-actions", body=unblock_doc, refresh=True)
+                                    
+                                    st.success(f"Successfully Unblocked {target_ip}")
+                                    time.sleep(1)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Rollback failed: {e}")
+                        else:
+                            c2.error("🚫 Permission Denied")
+                    elif action_type == "UNBLOCK_IP":
+                        c2.success("✅ Allowlisted")
+            except Exception as inner_e:
+                 st.error(f"Error rendering action: {inner_e}")
+
+    # --- DATA PREPARATION FOR ALERT DISPLAY (Restored) ---
+    # 1. Obtain Predictions for Linking
+    predictions = get_predictions(selected_tenant) 
+    if not predictions.empty:
+        preds_list = predictions.to_dict('records')
+    else:
+        preds_list = []
+    
+    # 2. Build Map: Alert ID -> Remediation Steps
+    alert_to_remediation = {}
+    pred_to_alert = {p.get("prediction_id"): p.get("trigger_alert_id") for p in preds_list}
+    
+    for pb in playbooks: # Uses the fetched playbooks
+        pred_id = pb.get("prediction_id")
+        alert_id = pred_to_alert.get(pred_id)
+        if alert_id:
+            steps = pb.get("remediation_steps", [])
+            steps_str = "\n".join([f"- {s}" for s in steps])
+            alert_to_remediation[alert_id] = steps_str
+
+    # 3. Build unique_threats from df (Alerts)
+    unique_threats = {} 
+
+    for _, row in df.iterrows():
+        # Check for specific CVEs first (Higher Priority)
+        vulns = row.get("vulnerabilities", [])
+        alert_id = row.get('id') 
+        
+        # Determine Remediation (Real SOAR vs Waiting)
+        if alert_id in alert_to_remediation:
+            remediation_text = alert_to_remediation[alert_id]
+        else:
+            remediation_text = "⏳ Waiting for AI analysis... (Prediction Engine -> SOAR)"
+
+        if isinstance(vulns, list) and vulns:
+            for v in vulns:
+                vid = v.get("id") or row.get("attack_type", "Unknown Threat")
+                
+                if vid not in unique_threats:
+                    unique_threats[vid] = {
+                        "type": "CVE Exploit" if v.get("id") else "AI Anomaly",
+                        "severity": v.get("severity", "High"),
+                        "description": v.get("description", "No description available."),
+                        "remediation": remediation_text,
                         "count": 1,
                         "source_ips": {row.get('source_ip')} if row.get('source_ip') else set(),
                         "confidence": row.get("confidence", 0),
                         "rag_context": row.get("rag_context", [])
                     }
                 else:
-                    unique_threats[attack_type]["count"] += 1
-                    ip = row.get('source_ip')
-                    # ... (rest of logic)
-                    if ip:
-                        if "source_ips" not in unique_threats[attack_type]:
-                            unique_threats[attack_type]["source_ips"] = set()
-                        unique_threats[attack_type]["source_ips"].add(ip)
-                        # Update description if multiple IPs are detected
-                        if len(unique_threats[attack_type]["source_ips"]) > 1:
-                             unique_threats[attack_type]["description"] = f"AI detected {attack_type} pattern from multiple sources ({len(unique_threats[attack_type]['source_ips'])} unique IPs)."
-                    
-                    # Accumulate RAG Context
+                    unique_threats[vid]["count"] += 1
+                    if row.get('source_ip'):
+                         if "source_ips" not in unique_threats[vid]: unique_threats[vid]["source_ips"] = set()
+                         unique_threats[vid]["source_ips"].add(row.get('source_ip'))
                     if row.get("rag_context"):
-                         if "rag_context" not in unique_threats[attack_type]:
-                             unique_threats[attack_type]["rag_context"] = []
-                         # Extend
+                         if "rag_context" not in unique_threats[vid]: unique_threats[vid]["rag_context"] = []
                          for r in row.get("rag_context", []):
-                             if r not in unique_threats[attack_type]["rag_context"]:
-                                 unique_threats[attack_type]["rag_context"].append(r)
+                             if r not in unique_threats[vid]["rag_context"]: unique_threats[vid]["rag_context"].append(r)
                     
-                # Collect Evidence (Unified)
-                if "evidence" not in unique_threats[attack_type]:
-                    unique_threats[attack_type]["evidence"] = set()
-                
+                if "evidence" not in unique_threats[vid]: unique_threats[vid]["evidence"] = set()
                 msg = row.get('summary') or row.get('message') or "No details"
                 fname = row.get('file_path') or row.get('related_report') or "Unknown Source"
                 evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
-                unique_threats[attack_type]["evidence"].add(evidence_str)
-
-        # === ROLLBACK / UNBLOCK SECTION ===
-        st.subheader("🛡️ Active Defense Actions (SOAR)")
-        active_blocks = df[df['Mitigation'].str.contains('Blocked', na=False)]
-        if not active_blocks.empty:
-            for idx, row in active_blocks.iterrows():
-                with st.expander(f"🔴 Blocked: {row['source_ip']} ({row['attack_type']})"):
-                    c1, c2 = st.columns([3, 1])
-                    c1.write(f"**Justification**: {row.get('summary', 'Threat Matched')}")
-                    
-                    # RBAC Check for Rollback
-                    if check_permission("ROLLBACK"):
-                        if c2.button("⏪ Rollback / Unblock", key=f"rb_{row['id']}"):
-                            try:
-                                # 1. Call Mock SOAR
-                                requests.post("http://soar-server:5000/unblock", json={"ip": row['source_ip']})
-                                
-                                # 2. Audit Log
-                                audit_logger.log_event(
-                                    actor=st.session_state.get("logged_in_user", "Admin"),
-                                    action="ROLLBACK_BLOCK",
-                                    target=row['source_ip'],
-                                    status="SUCCESS",
-                                    justification="Manual Rollback requested by Analyst",
-                                    role=st.session_state.get("user_role", "Unknown"),
-                                    session_id=st.session_state.get("session_id", "N/A")
-                                )
-                                
-                                # 3. Update OpenSearch
-                                client = get_opensearch_client()
-                                client.update(
-                                    index="security-logs-knn", 
-                                    id=row['id'], 
-                                    body={"doc": {"mitigation_status": "Rolled Back ⏪"}},
-                                    refresh=True # Ensure immediate visibility
-                                )
-                                st.success(f"Successfully Unblocked {row['source_ip']}")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Rollback failed: {e}")
-                    else:
-                        c2.error("🚫 Permission Denied (Tier 2+ Required)")
-
-        if unique_threats:
-            # 2. Full-Width Stacked Layout (No Columns)
-            st.markdown("#### 🛡️ Defense Playbooks (AI Generated)")
-            
-            
-            for tid, info in unique_threats.items():
-                # Dynamic color based on severity
-                severity_color = "red" if info["severity"] == "High" else "orange"
-                
-                # Enhanced Title: 🚨 [High] Defense Playbook: SQL Injection (Behavioral Pattern)
-                expander_title = f"🚨 [{info['severity']}] Defense Playbook: {tid} ({info['type']})"
-                
-                with st.expander(expander_title, expanded=False):
-                    st.markdown(f"**Severity**: :{severity_color}[{info['severity']}]")
-                    st.markdown(f"**Context**: {info['description']}")
-                    
-                    # --- XAI Section (Explainable AI) ---
-                    st.markdown("### 🧠 AI Confidence & Reasoning")
-                    c1, c2 = st.columns([1, 2])
-                    
-                    with c1:
-                         confidence = info.get("confidence", 0) # Need to propagate confidence to unique_threats
-                         st.metric("AI Confidence Score", f"{confidence}%")
-                         if confidence > 80:
-                             st.success("High Confidence: AI is very sure about this threat.")
-                         elif confidence > 50:
-                             st.warning("Medium Confidence: AI suggests human review.")
-                         else:
-                             st.info("Low Confidence: Likely a false positive or noise.")
-
-                    with c2:
-                        st.markdown("**Reasoning Factors:**")
-                        # Mock factors if not present (Real implementation needs to propagate 'rag_context' from alert to unique_threats)
-                        # Here we will try to retrieve it if available in the first alert of the group
-                        sample_rag = info.get("rag_context", [])
-                        if sample_rag:
-                            st.write("✅ **RAG Knowledge Matched:**")
-                            for r in sample_rag[:3]: # Show top 3
-                                st.caption(f"- {r[:100]}...")
-                        else:
-                            st.caption("ℹ️ Decision based on Heuristic Rules and Behavioral Patterns.")
-                            
-                        if "type" in info:
-                            st.write(f"✅ **Attack Pattern Identified:** {info['type']}")
-
-                    st.info(f"**Action Plan**:\n\n{info['remediation']}")
-                    
-                    # --- Evidence Section ---
-                    st.markdown("---")
-                    st.markdown("**Evidence / Associated Logs:**")
-                    evidence_list = list(info.get("evidence", []))
-                    
-                    # Limit to 5 items
-                    max_items = 5
-                    display_items = evidence_list[:max_items]
-                    
-                    for item in display_items:
-                        st.code(item, language="text")
-                        
-                    if len(evidence_list) > max_items:
-                        st.caption(f"... and {len(evidence_list) - max_items} more logs.")
-                    
-                    if info["count"] > 1:
-                        st.caption(f"👀 Affecting {info['count']} separate alerts.")
-            
+                unique_threats[vid]["evidence"].add(evidence_str)
         else:
-            st.info("No active threats requiring remediation. System Clean.")
+            attack_type = row.get("attack_type", "Suspicious Activity")
+            if attack_type not in unique_threats:
+                unique_threats[attack_type] = {
+                    "type": "Behavioral Pattern",
+                    "severity": row.get("severity", "Medium"),
+                    "description": f"AI detected {attack_type} pattern from {row.get('source_ip', 'unknown source')}.",
+                    "remediation": remediation_text,
+                    "count": 1,
+                    "source_ips": {row.get('source_ip')} if row.get('source_ip') else set(),
+                    "confidence": row.get("confidence", 0),
+                    "rag_context": row.get("rag_context", [])
+                }
+            else:
+                unique_threats[attack_type]["count"] += 1
+                ip = row.get('source_ip')
+                if ip:
+                    if "source_ips" not in unique_threats[attack_type]: unique_threats[attack_type]["source_ips"] = set()
+                    unique_threats[attack_type]["source_ips"].add(ip)
+                    if len(unique_threats[attack_type]["source_ips"]) > 1:
+                         unique_threats[attack_type]["description"] = f"AI detected {attack_type} pattern from multiple sources ({len(unique_threats[attack_type]['source_ips'])} unique IPs)."
+                if row.get("rag_context"):
+                     if "rag_context" not in unique_threats[attack_type]: unique_threats[attack_type]["rag_context"] = []
+                     for r in row.get("rag_context", []):
+                         if r not in unique_threats[attack_type]["rag_context"]: unique_threats[attack_type]["rag_context"].append(r)
+                
+            if "evidence" not in unique_threats[attack_type]: unique_threats[attack_type]["evidence"] = set()
+            msg = row.get('summary') or row.get('message') or "No details"
+            fname = row.get('file_path') or row.get('related_report') or "Unknown Source"
+            evidence_str = f"{os.path.basename(fname)}: {msg[:100]}..."
+            unique_threats[attack_type]["evidence"].add(evidence_str)
+
+    if unique_threats:
+        # 2. Full-Width Stacked Layout (No Columns)
+        st.markdown("#### 🛡️ Defense Playbooks (AI Generated)")
+        
+        
+        for tid, info in unique_threats.items():
+            # Dynamic color based on severity
+            severity_color = "red" if info["severity"] == "High" else "orange"
+            
+            # Enhanced Title: 🚨 [High] Defense Playbook: SQL Injection (Behavioral Pattern)
+            expander_title = f"🚨 [{info['severity']}] Defense Playbook: {tid} ({info['type']})"
+            
+            with st.expander(expander_title, expanded=False):
+                st.markdown(f"**Severity**: :{severity_color}[{info['severity']}]")
+                st.markdown(f"**Context**: {info['description']}")
+                
+                # --- XAI Section (Explainable AI) ---
+                st.markdown("### 🧠 AI Confidence & Reasoning")
+                c1, c2 = st.columns([1, 2])
+                
+                with c1:
+                     confidence = info.get("confidence", 0) # Need to propagate confidence to unique_threats
+                     st.metric("AI Confidence Score", f"{confidence}%")
+                     if confidence > 80:
+                         st.success("High Confidence: AI is very sure about this threat.")
+                     elif confidence > 50:
+                         st.warning("Medium Confidence: AI suggests human review.")
+                     else:
+                         st.info("Low Confidence: Likely a false positive or noise.")
+
+                with c2:
+                    st.markdown("**Reasoning Factors:**")
+                    # Mock factors if not present (Real implementation needs to propagate 'rag_context' from alert to unique_threats)
+                    # Here we will try to retrieve it if available in the first alert of the group
+                    sample_rag = info.get("rag_context", [])
+                    if sample_rag:
+                        st.write("✅ **RAG Knowledge Matched:**")
+                        for r in sample_rag[:3]: # Show top 3
+                            st.caption(f"- {r[:100]}...")
+                    else:
+                        st.caption("ℹ️ Decision based on Heuristic Rules and Behavioral Patterns.")
+                        
+                    if "type" in info:
+                        st.write(f"✅ **Attack Pattern Identified:** {info['type']}")
+
+                st.info(f"**Action Plan**:\n\n{info['remediation']}")
+                
+                # --- Evidence Section ---
+                st.markdown("---")
+                st.markdown("**Evidence / Associated Logs:**")
+                evidence_list = list(info.get("evidence", []))
+                
+                # Limit to 5 items
+                max_items = 5
+                display_items = evidence_list[:max_items]
+                
+                for item in display_items:
+                    st.code(item, language="text")
+                    
+                if len(evidence_list) > max_items:
+                    st.caption(f"... and {len(evidence_list) - max_items} more logs.")
+                
+                if info["count"] > 1:
+                    st.caption(f"👀 Affecting {info['count']} separate alerts.")
+        
+    else:
+        st.info("No active threats requiring remediation. System Clean.")
 
 # --- Enriched Alerts Dashboard (CMDB 面板) ---
 elif page == "📈 Enriched Alerts Dashboard":
@@ -1019,9 +1298,11 @@ elif page == "🎯 Predictive Threat Map":
 
     predictions = get_predictions(selected_tenant)
 
-    if not predictions:
+    if predictions.empty:
         st.info("No predictions generated yet. Predictions are triggered when high-risk alerts are detected or global threat outbreaks are identified.")
     else:
+        # Compatibility: Convert DataFrame to list of dicts for iteration logic below
+        predictions = predictions.to_dict('records')
         # \u2500\u2500 Top metrics \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         active_preds = [p for p in predictions if p.get("status") == "ACTIVE"]
         preemptive_preds = [p for p in predictions if p.get("status") == "PREEMPTIVE"]
@@ -1034,7 +1315,7 @@ elif page == "🎯 Predictive Threat Map":
         m4.metric("Avg Risk Score", f"{avg_risk:.1f}")
 
         # \u2500\u2500 Tabs for alert-triggered vs zero-log \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-        tab1, tab2 = st.tabs(["\ud83d\udea8 Attack Path Predictions", "\ud83d\udee1\ufe0f Zero-Log Preemptive Alerts"])
+        tab1, tab2 = st.tabs(["🚨 Attack Path Predictions", "🛡️ Zero-Log Preemptive Alerts"])
 
         with tab1:
             if not active_preds:
@@ -1042,7 +1323,7 @@ elif page == "🎯 Predictive Threat Map":
             else:
                 for pred in active_preds:
                     risk = pred.get("overall_risk_score", 0)
-                    risk_color = "\ud83d\udd34" if risk >= 70 else "\ud83d\udfe1" if risk >= 40 else "\ud83d\udfe2"
+                    risk_color = "🔴" if risk >= 70 else "🟡" if risk >= 40 else "🟢"
                     host_info = pred.get("compromised_host", {})
 
                     with st.expander(
@@ -1058,7 +1339,7 @@ elif page == "🎯 Predictive Threat Map":
                         # Kill Chain Table
                         chain = pred.get("predicted_kill_chain", [])
                         if chain:
-                            st.markdown("#### \ud83c\udfaf Predicted Kill Chain")
+                            st.markdown("#### 🎯 Predicted Kill Chain")
                             chain_data = []
                             for step in chain:
                                 conf = step.get("confidence", 0)
@@ -1076,7 +1357,7 @@ elif page == "🎯 Predictive Threat Map":
                         # Defensive recommendations
                         actions = pred.get("recommended_actions", [])
                         if actions:
-                            st.markdown("#### \ud83d\udee1\ufe0f Recommended Defensive Actions")
+                            st.markdown("#### 🛡️ Recommended Defensive Actions")
                             for i, action in enumerate(actions, 1):
                                 st.markdown(f"{i}. {action}")
 
@@ -1089,7 +1370,7 @@ elif page == "🎯 Predictive Threat Map":
                     cve_id = pred.get("cve_id", "Unknown CVE")
 
                     with st.expander(
-                        f"\ud83d\udea8 {cve_id} | Risk {risk:.0f} | {pred.get('timestamp', '')[:19]}",
+                        f"🚨 {cve_id} | Risk {risk:.0f} | {pred.get('timestamp', '')[:19]}",
                         expanded=True,
                     ):
                         st.markdown(f"**Prediction ID**: `{pred.get('prediction_id', '?')}`")
@@ -1113,7 +1394,7 @@ elif page == "🎯 Predictive Threat Map":
                         # LLM defense plan
                         plan = pred.get("prediction", {})
                         if plan:
-                            st.markdown(f"#### \ud83d\udcdd {plan.get('alert_title', 'Defense Plan')}")
+                            st.markdown(f"#### 📝 {plan.get('alert_title', 'Defense Plan')}")
                             st.markdown(plan.get("risk_assessment", ""))
 
                             actions = plan.get("immediate_actions", [])
@@ -1138,25 +1419,31 @@ elif page == "🛡️ Moving Target Defense":
     st.title("🛡️ Moving Target Defense")
     st.caption("Phase 3 — Dynamic obfuscation & container migration to invalidate attacker reconnaissance.")
 
-    # ─── Helper: Query MTD indices ────────────────────
+    # ─── Helper: Query MTD indices    # Helper：撈取 MTD 資料
+    # ─── Helper: Query MTD indices    # Helper：撈取 MTD 資料
     def get_mtd_data(index_name, size=50):
         try:
+            client = get_opensearch_client()
             resp = client.search(
                 index=index_name,
-                body={"query": {"match_all": {}}, "size": size, "sort": [{"proposed_at": {"order": "desc", "unmapped_type": "date"}}, {"created_at": {"order": "desc", "unmapped_type": "date"}}]},
+                body={"query": {"match_all": {}}, "sort": [{"timestamp": {"order": "desc", "unmapped_type": "date"}}], "size": size}
             )
             return [hit["_source"] for hit in resp["hits"]["hits"]]
-        except Exception:
+        except Exception as e:
+            st.error(f"Failed to fetch MTD data from {index_name}: {e}")
             return []
 
+    # Helper：撈取 Audit Log
     def get_mtd_audit(size=100):
         try:
+            client = get_opensearch_client()
             resp = client.search(
                 index="mtd-audit-log",
-                body={"query": {"match_all": {}}, "size": size, "sort": [{"proposed_at": {"order": "desc", "unmapped_type": "date"}}]},
+                body={"query": {"match_all": {}}, "sort": [{"timestamp": {"order": "desc", "unmapped_type": "date"}}], "size": size}
             )
             return [hit["_source"] for hit in resp["hits"]["hits"]]
-        except Exception:
+        except Exception as e:
+            st.error(f"Failed to fetch MTD Audit Log: {e}")
             return []
 
     # ─── Metrics Row ──────────────────────────────────
