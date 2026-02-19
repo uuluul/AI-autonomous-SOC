@@ -370,7 +370,15 @@ docker compose exec cti-pipeline-master python /app/src/setup_knowledge_base.py
 
 Wait for: `✅ MITRE Import Completed` / `✅ AIDEFEND Import Completed`
 
-### 4. Access the Dashboard
+### 4. Verify Installation
+
+Run the production validation suite to ensure all systems are operational:
+
+```bash
+./test_all.sh
+```
+
+### 5. Access the Dashboard
 
 Open **[http://localhost:8501](http://localhost:8501)** and log in with `admin / admin`.
 
@@ -449,20 +457,20 @@ The script simulates a full APT kill chain:
 | **Container Orchestration** | Docker & Docker Compose (17 services) |
 | **Frontend** | Streamlit, PyDeck (3D maps), Plotly, Mermaid.js |
 | **Data Standards** | STIX 2.1, MITRE ATT&CK, AIDEFEND |
-| **Testing** | Pytest, Chaos Engineering, GitHub Actions CI/CD |
+| **Testing** | Pytest, Integration Suite, Load Testing, Chaos Engineering |
 
 ---
 
 ## 🧪 Testing & CI/CD
 
 ```bash
-# Run all tests
-make test
+# Run the full Production Validation Suite (Recommended)
+./test_all.sh
 
-# Specific suites
-make unit    # Syntax & logic
-make smoke   # Container connectivity
-make e2e     # Full pipeline verification
+# Run specific test layers
+python3 tests/integration/test_components.py  # Integration (RabbitMQ -> Worker -> OpenSearch)
+python3 tests/system/verify_brain_growth.py    # System (AI Learning & Indexing)
+python3 tests/load/api_stress_test.py          # Load (API Concurrency)
 ```
 
 ### Staging Environment (No API Costs)
