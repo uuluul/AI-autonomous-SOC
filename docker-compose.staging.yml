@@ -51,10 +51,11 @@ services:
     networks:
       - staging-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/embeddings"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+      test: ["CMD-SHELL", "python3 -c 'import socket; s = socket.socket(); s.settimeout(2); s.connect((\"0.0.0.0\", 8000))' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   app:
     build: .

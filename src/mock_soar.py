@@ -310,6 +310,8 @@ if __name__ == "__main__":
     init_indices()
     
     # Ensure pika is installed (it is in requirements.txt)
-    server = ThreadingHTTPServer(('0.0.0.0', 5000), SimpleHandler)
-    print("   ✅ Real SOAR Server listening on port 5000... (Analysis Enabled)", flush=True)
+    HOST = "0.0.0.0"
+    PORT = 5000
+    server = ThreadingHTTPServer((HOST, PORT), SimpleHandler)
+    print(f"   ✅ Real SOAR Server listening on {HOST}:{PORT}... (Analysis Enabled)", flush=True)
     server.serve_forever()
