@@ -3,11 +3,20 @@ import time
 import json
 import uuid
 import logging
+import schedule
+import subprocess
+import ipaddress
+from datetime import datetime, timedelta
+
+# 載入專案模組
+try:
+    from llm_client import LLMClient, LocalLLMCriticalError
+except ImportError:
+    # Fallback for local development without src. prefix
+    from src.llm_client import LLMClient, LocalLLMCriticalError
 import glob
 import pika
 import requests
-from datetime import datetime, timedelta
-from llm_client import LLMClient, LocalLLMCriticalError
 from to_stix import build_stix_bundle
 from to_pdf import generate_pdf_report
 from extract_schema import DEFAULT_SYSTEM_PROMPT, EXTRACTION_SCHEMA_DESCRIPTION
@@ -332,7 +341,6 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
       1. 檔案: {"file_path": "/app/data/input/LOG.txt", "filename": "LOG.txt"}
       2. 串流: {"timestamp": "...", "source_ip": "...", "message": "..."}
     """
-    
     # --- 判斷來源並取得內容 ---
     file_path = None
     raw_content = None
@@ -426,6 +434,14 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
 
         try:
             chunk_extraction = llm.get_extraction(enhanced_chunk)
+            
+            # TYPE SAFETY: Handle cases where LLM returns a list instead of a dict
+            if isinstance(chunk_extraction, list):
+                if len(chunk_extraction) > 0:
+                    chunk_extraction = chunk_extraction[0]
+                else:
+                    chunk_extraction = {}
+
             if chunk_extraction:
                 # Capture RAG Context for Explainable AI (XAI)
                 if rag_context:
@@ -444,6 +460,27 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
 
     extracted = merge_extractions(chunk_results)
 
+    # TYPE SAFETY: Deep Enforce Dictionary Type
+    if isinstance(extracted, list):
+        if len(extracted) > 0 and isinstance(extracted[0], dict):
+            extracted = extracted[0]
+        else:
+            extracted = {}
+    
+    if not isinstance(extracted, dict):
+         extracted = {}
+
+    # TYPE SAFETY: Deep Enforce Indicators Type
+    identifiers = extracted.get("indicators", {})
+    if isinstance(identifiers, list):
+        # Case where LLM returns indicators as a list
+        if len(identifiers) > 0 and isinstance(identifiers[0], dict):
+            extracted["indicators"] = identifiers[0]
+        else:
+            extracted["indicators"] = {}
+    elif not isinstance(identifiers, dict):
+        extracted["indicators"] = {}
+
     # === Multi-Tenancy Injection ===
     tenant_id = task_payload.get("tenant_id", "default_tenant")
     extracted["tenant_id"] = tenant_id
@@ -453,7 +490,11 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     if is_log and normalized_data:
         if "source_ip" in normalized_data:
             if "indicators" not in extracted: extracted["indicators"] = {}
+            # Re-verify indicators is dict after potential create
+            if not isinstance(extracted["indicators"], dict): extracted["indicators"] = {}
+
             if "ipv4" not in extracted["indicators"]: extracted["indicators"]["ipv4"] = []
+            if not isinstance(extracted["indicators"]["ipv4"], list): extracted["indicators"]["ipv4"] = []
             
             ip = normalized_data["source_ip"]
             if ip and ip not in extracted["indicators"]["ipv4"]:
@@ -498,6 +539,11 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         enriched_data = {}
         ti_results = {}
         indicators = extracted.get("indicators", {})
+        
+        # --- 終極防呆機制：強制轉換 List 為 Dict ---
+        if isinstance(indicators, list):
+            indicators = indicators[0] if (len(indicators) > 0 and isinstance(indicators[0], dict)) else {}
+            extracted["indicators"] = indicators
         
         max_ti_score = 0
         
@@ -698,6 +744,11 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         # 建立企業白名單 (Optimization 2)
         WHITELIST_IPS = {"8.8.8.8", "1.1.1.1", "127.0.0.1"} 
         indicators = extracted.get("indicators", {})
+        
+        # --- 終極防呆機制：強制轉換 List 為 Dict ---
+        if isinstance(indicators, list):
+            indicators = indicators[0] if (len(indicators) > 0 and isinstance(indicators[0], dict)) else {}
+            extracted["indicators"] = indicators
         
         # Pre-check: Don't generate report if the ATTACKER (source) IP is whitelisted.
         # IMPORTANT: Only check the source_ip, NOT all indicator IPs.

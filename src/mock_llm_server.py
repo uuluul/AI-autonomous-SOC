@@ -77,6 +77,11 @@ def generate_red_team_response(prompt_text):
                 "reasoning": f"Dump Domain Admin hashes from {t3} LSASS process for Golden Ticket creation. Ultimate objective for full domain compromise."
             }
         ],
+        "indicators": {
+            "ipv4": [t1, t2, t3],
+            "domains": [],
+            "hashes": {}
+        },
         "recommended_defensive_actions": [
             f"CRITICAL: Isolate host {t1} immediately — block all RDP (3389) inbound.",
             "Reset 'srv_backup' and 'admin' service account credentials across the domain.",
@@ -217,6 +222,11 @@ class Handler(BaseHTTPRequestHandler):
         else:
             logger.info("[STANDARD] Handling log analysis request")
             response_data = generate_default_response(full_context)
+
+        if isinstance(response_data, list):
+            # Fallback: if it's a list, wrap it or take first item to ensure dict
+            logger.warning("[MockLLM] Response was a list, converting to dict to prevent worker crash.")
+            response_data = response_data[0] if response_data else {}
 
         # 4. Wrap in OpenAI ChatCompletion format
         # The 'content' of the message must be a JSON string as expected by the consumers.

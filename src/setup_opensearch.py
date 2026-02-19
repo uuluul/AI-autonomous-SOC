@@ -194,10 +194,13 @@ def apply_retention_policy(client):
 def _create_if_not_exists(client, index_name, body):
     if not client.indices.exists(index=index_name):
         try:
-            client.indices.create(index=index_name, body=body)
+            client.indices.create(index=index_name, body=body, ignore=400)
             logger.info(f"  Index '{index_name}' created successfully.")
         except Exception as e:
-            logger.error(f"  Failed to create index '{index_name}' : {e}")
+            if "resource_already_exists_exception" in str(e):
+                logger.info(f"  Index '{index_name}' already exists. Skipping.")
+            else:
+                logger.error(f"  Failed to create index '{index_name}' : {e}")
     else:
         logger.info(f"   Index '{index_name}' already exists. Skipping.")
 
