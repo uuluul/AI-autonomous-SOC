@@ -76,10 +76,10 @@ def relay_honeypot_event(raw_data):
             )
 
         connection.close()
-        print(f"  [SOAR] 🍯 Honeypot telemetry relayed to RabbitMQ ({HONEYPOT_QUEUE})", flush=True)
+        print(f"  [SOAR] Honeypot telemetry relayed to RabbitMQ ({HONEYPOT_QUEUE})", flush=True)
     except Exception as e:
         import traceback
-        print(f"  [SOAR] ❌ Honeypot relay failed: {repr(e)}", flush=True)
+        print(f"  [SOAR] Honeypot relay failed: {repr(e)}", flush=True)
         traceback.print_exc()
 
 def send_to_rabbitmq(msg):
@@ -189,7 +189,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
             risk_score = prediction.get("overall_risk_score", 0)
             scanner_ip = prediction.get("scanner_ip", "Unknown")
             
-            print(f"  [SOAR] 🛡️ Received Analysis Request for Prediction {pred_id} (Risk: {risk_score})", flush=True)
+            print(f"  [SOAR] Received Analysis Request for Prediction {pred_id} (Risk: {risk_score})", flush=True)
             
             client = get_opensearch_client()
             
@@ -214,9 +214,9 @@ class SimpleHandler(BaseHTTPRequestHandler):
             # Index Playbook
             try:
                 client.index(index="defense-playbooks", body=playbook_doc, refresh=True)
-                print(f"  [SOAR] ✅ Created Playbook {playbook_id}", flush=True)
+                print(f"  [SOAR] Created Playbook {playbook_id}", flush=True)
             except Exception as e:
-                print(f"  [SOAR] ❌ Failed to index Playbook {playbook_id}: {e}", flush=True)
+                print(f"  [SOAR] Failed to index Playbook {playbook_id}: {e}", flush=True)
                 # Continuing to action simulation anyway...
 
             # --- 2. Execute Action (Simulation) ---
@@ -233,14 +233,14 @@ class SimpleHandler(BaseHTTPRequestHandler):
                     "executor": "soar-server"
                 }
                 client.index(index="soar-actions", body=action_doc, refresh=True)
-                print(f"  [SOAR] ⚡ Executed Action {action_id} (BLOCK {scanner_ip})", flush=True)
+                print(f"  [SOAR] Executed Action {action_id} (BLOCK {scanner_ip})", flush=True)
             
             self.send_response(200)
             self.end_headers()
             self.wfile.write(json.dumps({"status": "analyzed", "playbook_id": playbook_id}).encode())
             
         except Exception as e:
-            print(f"  [SOAR] ❌ Analysis failed: {e}", flush=True)
+            print(f"  [SOAR] Analysis failed: {e}", flush=True)
             self.send_response(500)
             self.end_headers()
             self.wfile.write(b"Analysis Failed")
@@ -254,7 +254,7 @@ import time
 def init_indices():
     """Ensure required indices exist with correct mappings."""
     try:
-        print("  [SOAR] ⏳ Initializing OpenSearch indices...", flush=True)
+        print("  [SOAR] Initializing OpenSearch indices...", flush=True)
         # Wait for OpenSearch to be ready
         client = None
         for i in range(5):
@@ -268,7 +268,7 @@ def init_indices():
             time.sleep(2)
         
         if not client:
-             print("  [SOAR] ⚠️ OpenSearch not validated, attempting creation anyway...", flush=True)
+             print("  [SOAR] OpenSearch not validated, attempting creation anyway...", flush=True)
              client = get_opensearch_client()
 
         indices = {
@@ -299,12 +299,12 @@ def init_indices():
         for index_name, body in indices.items():
             if not client.indices.exists(index=index_name):
                 client.indices.create(index=index_name, body=body)
-                print(f"  [SOAR] ✅ Created index: {index_name}", flush=True)
+                print(f"  [SOAR] Created index: {index_name}", flush=True)
             else:
-                print(f"  [SOAR] ℹ️ Index exists: {index_name}", flush=True)
+                print(f"  [SOAR] Index exists: {index_name}", flush=True)
                 
     except Exception as e:
-        print(f"  [SOAR] ❌ Failed to initialize indices: {e}", flush=True)
+        print(f"  [SOAR] Failed to initialize indices: {e}", flush=True)
 
 if __name__ == "__main__":
     init_indices()
@@ -313,5 +313,5 @@ if __name__ == "__main__":
     HOST = "0.0.0.0"
     PORT = 5000
     server = ThreadingHTTPServer((HOST, PORT), SimpleHandler)
-    print(f"   ✅ Real SOAR Server listening on {HOST}:{PORT}... (Analysis Enabled)", flush=True)
+    print(f"   Real SOAR Server listening on {HOST}:{PORT}... (Analysis Enabled)", flush=True)
     server.serve_forever()

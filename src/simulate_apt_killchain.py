@@ -13,8 +13,8 @@ RABBITMQ_USER = os.getenv('RABBITMQ_DEFAULT_USER', 'user')
 RABBITMQ_PASS = os.getenv('RABBITMQ_DEFAULT_PASS', 'password')
 
 def send_apt_signals():
-    print(f"🚀 Initiating APT-29 Kill Chain Simulation...")
-    print(f"🔌 Connecting to RabbitMQ at {RABBITMQ_HOST}...")
+    print(f"Initiating APT-29 Kill Chain Simulation...")
+    print(f"Connecting to RabbitMQ at {RABBITMQ_HOST}...")
 
     try:
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
@@ -72,15 +72,15 @@ def send_apt_signals():
                 body=json.dumps(msg),
                 properties=pika.BasicProperties(delivery_mode=2)
             )
-            print(f"  ✅ [Step {i+1}/3] Sent CTI Report: {msg['source']}")
+            print(f"  [Step {i+1}/3] Sent CTI Report: {msg['source']}")
             time.sleep(1) # Pace the attack
 
         connection.close()
-        print("☠️  APT Simulation Complete. Indicators injected into pipeline.")
+        print("APT Simulation Complete. Indicators injected into pipeline.")
         return True
 
     except Exception as e:
-        print(f"❌ Failed to send APT signals: {e}")
+        print(f"[ERROR] Failed to send APT signals: {e}")
         return False
 
 if __name__ == "__main__":

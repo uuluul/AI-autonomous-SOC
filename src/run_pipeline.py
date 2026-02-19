@@ -239,7 +239,7 @@ def cleanup_old_files():
     RETENTION_DAYS = 30  #  設定保留幾天
     cutoff_time = time.time() - (RETENTION_DAYS * 86400) # 計算截止時間戳
     
-    logger.info(f"🧹 [Cleanup] Starting cleanup of files older than {RETENTION_DAYS} days...")
+    logger.info(f"[Cleanup] Starting cleanup of files older than {RETENTION_DAYS} days...")
     
     deleted_count = 0
     try:
@@ -337,17 +337,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     file_path = None
     raw_content = None
 
-    # ========== 🆕 RAW MODE (E2E / API ingestion) ==========
-    if "raw_log" in task_payload or "message" in task_payload:
-        raw_content = task_payload.get("raw_log") or task_payload.get("message")
-        # Robustness: if message is a dict/list, convert to JSON string
-        if not isinstance(raw_content, str):
-            raw_content = json.dumps(raw_content, ensure_ascii=False, default=str)
-        filename = task_payload.get("filename") or f"RAW_{task_payload.get('event_id', uuid.uuid4())}.log"
-
         logger.info(f"  [Raw Mode] Processing: {filename} (event_id={task_payload.get('event_id')})")
 
-    # ========== 📂 FILE MODE ==========
+    # ========== [File Mode] ==========
     elif "file_path" in task_payload:
         filename = task_payload.get("filename", "unknown.txt")
         file_path = task_payload["file_path"]
@@ -361,9 +353,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
             logger.error(f"  Failed to read file: {e}")
             return
 
-    # ========== ⚡ STREAM MODE ==========
+    # ========== [Stream Mode] ==========
     else:
-        logger.info(f"⚡ [Stream Mode] Processing live log event")
+        logger.info(f"[Stream Mode] Processing live log event")
 
         ts = int(time.time())
         src_ip = task_payload.get("source_ip", "unknown_ip")
@@ -633,8 +625,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
     
     if is_confirmed_high_risk:
         for ip in indicators_list:
+        for ip in indicators_list:
             if is_critical_infrastructure(ip):
-                logger.warning(f"🛑 [GUARDRAIL] Target {ip} is CRITICAL INFRASTRUCTURE. Downgrading to MANUAL APPROVAL.")
+                logger.warning(f"[GUARDRAIL] Target {ip} is CRITICAL INFRASTRUCTURE. Downgrading to MANUAL APPROVAL.")
                 
                 # Audit Log the intervention
                 audit_logger.log_event(
@@ -661,7 +654,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                     max_ti = info.get("score", 0)
             
             if max_ti < 20: 
-                 logger.warning(f"🛑 [GUARDRAIL] AI High Confidence ({confidence}%) but Threat Intel says CLEAN (Max Score: {max_ti}). Downgrading to MANUAL.")
+                 logger.warning(f"[GUARDRAIL] AI High Confidence ({confidence}%) but Threat Intel says CLEAN (Max Score: {max_ti}). Downgrading to MANUAL.")
                  
                  audit_logger.log_event(
                     actor="Hybrid-Guardrail",
@@ -815,9 +808,9 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
                 pred_conn.close()
-                logger.info(f"  🎯 Prediction task dispatched for alert log_{report_id}")
+                logger.info(f"  [PREDICTION] Prediction task dispatched for alert log_{report_id}")
             except Exception as pred_exc:
-                logger.warning(f"  ⚠️ Failed to dispatch prediction (non-critical): {pred_exc}")
+                logger.warning(f"  [WARNING] Failed to dispatch prediction (non-critical): {pred_exc}")
 
     # 3. 噪音過濾 / 低信心 Log
     elif is_log and confidence < 40 and not force_human_review:
@@ -828,13 +821,13 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
         # 邊緣案例，例如有情報但 AI 不太確定，丟給人工審核
         if is_log:
             source_type = "suspicious_log"
-            log_msg = f"🤔 Suspicious Log ({confidence}%). Sending to Human Review..."
+            log_msg = f"[REVIEW] Suspicious Log ({confidence}%). Sending to Human Review..."
         elif is_premium_feed:
             source_type = "unverified_cti_feed"
-            log_msg = f"🤔 Unverified Premium CTI ({confidence}%). Sending to Human Review..."
+            log_msg = f"[REVIEW] Unverified Premium CTI ({confidence}%). Sending to Human Review..."
         else:
             source_type = "manual"
-            log_msg = f"🤔 Ambiguous Manual Upload ({confidence}%). Sending to Human Review..."
+            log_msg = f"[REVIEW] Ambiguous Manual Upload ({confidence}%). Sending to Human Review..."
             
         logger.info(log_msg)
         
@@ -859,7 +852,7 @@ def process_task(task_payload: dict, llm: LLMClient, enricher: EnrichmentEngine,
                 "threat_matched": True, # Keep it visible as threat
                 "attack_type": extracted.get("attack_type", "Suspicious Activity"),
                 "severity": "Medium",
-                "mitigation_status": "Pending Manual Approval ⏳"
+                "mitigation_status": "Pending Manual Approval [PENDING]"
              })
              # Use a distinct ID to avoid overwriting if approved later (though dashboard usually filters by ID)
              report_id = os.path.splitext(filename)[0]

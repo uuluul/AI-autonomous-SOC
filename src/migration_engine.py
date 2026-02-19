@@ -35,7 +35,7 @@ try:
 except ImportError:
     DOCKER_AVAILABLE = False
     logger.warning(
-        "⚠️  Docker SDK not installed. Migration Engine operates in DRY-RUN mode."
+        "Docker SDK not installed. Migration Engine operates in DRY-RUN mode."
     )
 
 try:
@@ -148,7 +148,7 @@ def create_green_network(
     )
 
     logger.info(
-        f"🟢 Green network created: {net_name} "
+        f"Green network created: {net_name} "
         f"(subnet=172.31.{subnet_octet}.0/24)"
     )
     return network
@@ -177,7 +177,7 @@ class MigrationEngine:
                 self.docker = docker.from_env()
                 self.docker.ping()
             except docker.errors.DockerException as exc:
-                logger.error(f"❌ Docker unavailable: {exc}")
+                logger.error(f"Docker unavailable: {exc}")
                 self.docker = None
         else:
             self.docker = None
@@ -225,7 +225,7 @@ class MigrationEngine:
 
         if not self.docker:
             logger.info(
-                f"🏜️  DRY-RUN migration: {target_container_name} "
+                f"DRY-RUN migration: {target_container_name} "
                 f"(reason: {trigger_reason})"
             )
             result["status"] = "DRY_RUN"
@@ -238,7 +238,7 @@ class MigrationEngine:
                 blue = self.docker.containers.get(target_container_name)
             except docker.errors.NotFound:
                 logger.error(
-                    f"❌ Target container not found: {target_container_name}"
+                    f"Target container not found: {target_container_name}"
                 )
                 result["status"] = "FAILED"
                 result["error"] = "Container not found"
@@ -264,7 +264,7 @@ class MigrationEngine:
                 ).get("Networks", {})
 
                 logger.info(
-                    f"🔍 [{migration_id[:8]}] Blue container networks: "
+                    f"[{migration_id[:8]}] Blue container networks: "
                     f"{json.dumps({n: info.get('IPAddress', '') for n, info in live_networks.items()})}"
                 )
 
@@ -286,16 +286,16 @@ class MigrationEngine:
                             old_ip = ip_val
                             break
             except Exception as ip_exc:
-                logger.warning(f"⚠️  Tier 1 (Networks dict) failed: {ip_exc}")
+                logger.warning(f"Tier 1 (Networks dict) failed: {ip_exc}")
 
             # --- Tier 2: Global NetworkSettings.IPAddress ---
             if not old_ip:
                 try:
                     old_ip = blue.attrs.get("NetworkSettings", {}).get("IPAddress", "")
                     if old_ip:
-                        logger.info(f"🔍 [{migration_id[:8]}] Tier 2: Global IPAddress = {old_ip}")
+                        logger.info(f"[{migration_id[:8]}] Tier 2: Global IPAddress = {old_ip}")
                 except Exception as exc:
-                    logger.warning(f"⚠️  Tier 2 (Global IPAddress) failed: {exc}")
+                    logger.warning(f"Tier 2 (Global IPAddress) failed: {exc}")
 
             # --- Tier 3: subprocess docker inspect ---
             if not old_ip:
@@ -316,9 +316,9 @@ class MigrationEngine:
                         found = _re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', raw)
                         if found:
                             old_ip = found[0]
-                            logger.info(f"🔍 [{migration_id[:8]}] Tier 3: subprocess inspect = {old_ip}")
+                            logger.info(f"[{migration_id[:8]}] Tier 3: subprocess inspect = {old_ip}")
                 except Exception as exc:
-                    logger.warning(f"⚠️  Tier 3 (subprocess inspect) failed: {exc}")
+                    logger.warning(f"Tier 3 (subprocess inspect) failed: {exc}")
 
             # --- Tier 4: Snapshot network_ip_map ---
             if not old_ip:
@@ -326,20 +326,20 @@ class MigrationEngine:
                 for net_ip in ip_map.values():
                     if net_ip:
                         old_ip = net_ip
-                        logger.info(f"🔍 [{migration_id[:8]}] Tier 4: snapshot ip_map = {old_ip}")
+                        logger.info(f"[{migration_id[:8]}] Tier 4: snapshot ip_map = {old_ip}")
                         break
 
             # --- Tier 5: Hardcoded mock (demo safety net) ---
             if not old_ip:
                 old_ip = "172.20.0.99"
                 logger.warning(
-                    f"⚠️  [{migration_id[:8]}] All IP extraction tiers failed! "
+                    f"[{migration_id[:8]}] All IP extraction tiers failed! "
                     f"Using hardcoded mock IP: {old_ip}"
                 )
 
             result["old_blue_ip"] = old_ip
             logger.info(
-                f"🔄 [{migration_id[:8]}] Starting Blue/Green migration "
+                f"[{migration_id[:8]}] Starting Blue/Green migration "
                 f"for {target_container_name} (old_ip={old_ip})"
             )
 
@@ -360,7 +360,7 @@ class MigrationEngine:
             healthy = self._wait_for_health(green_container)
             if not healthy:
                 logger.error(
-                    f"❌ [{migration_id[:8]}] Green container failed health check"
+                    f"[{migration_id[:8]}] Green container failed health check"
                 )
                 result["status"] = "FAILED"
                 result["error"] = "Health check timeout"
@@ -380,29 +380,29 @@ class MigrationEngine:
                 prod_net = self.docker.networks.get(PRODUCTION_NETWORK)
                 prod_net.connect(green_container)
                 logger.info(
-                    f"🔗 [{migration_id[:8]}] Green connected to "
+                    f"[{migration_id[:8]}] Green connected to "
                     f"{PRODUCTION_NETWORK}"
                 )
             except docker.errors.NotFound:
                 logger.warning(
-                    f"⚠️  Production network not found, skipping connect"
+                    f"Production network not found, skipping connect"
                 )
             except docker.errors.APIError as exc:
-                logger.warning(f"⚠️  Could not connect Green to production: {exc}")
+                logger.warning(f"Could not connect Green to production: {exc}")
 
             # Note: In production, this would update the Nginx upstream config.
             # The MTD Controller handles the Nginx upstream update externally.
             result["traffic_switched_at"] = datetime.utcnow().isoformat()
 
             logger.info(
-                f"✅ [{migration_id[:8]}] Phase B: Traffic routed to Green "
+                f"[{migration_id[:8]}] Phase B: Traffic routed to Green "
                 f"({green_ip})"
             )
 
             # ═══ Phase C: Drain & terminate Blue ══════
             logger.info(
-                f"⏳ [{migration_id[:8]}] Phase C: Draining Blue connections "
-                f"({DEFAULT_DRAIN_TIMEOUT}s) …"
+                f"[{migration_id[:8]}] Phase C: Draining Blue connections "
+                f"({DEFAULT_DRAIN_TIMEOUT}s) ..."
             )
             time.sleep(DEFAULT_DRAIN_TIMEOUT)
 
@@ -410,21 +410,21 @@ class MigrationEngine:
                 blue.stop(timeout=10)
                 blue.remove(force=True)
                 logger.info(
-                    f"🗑️  [{migration_id[:8]}] Blue container terminated: "
+                    f"[{migration_id[:8]}] Blue container terminated: "
                     f"{target_container_name}"
                 )
             except docker.errors.APIError as exc:
-                logger.error(f"❌ Error removing Blue: {exc}")
+                logger.error(f"Error removing Blue: {exc}")
 
             # Rename Green to original name
             try:
                 green_container.rename(target_container_name)
                 logger.info(
-                    f"📛 [{migration_id[:8]}] Green renamed to "
+                    f"[{migration_id[:8]}] Green renamed to "
                     f"{target_container_name}"
                 )
             except docker.errors.APIError as exc:
-                logger.warning(f"⚠️  Could not rename Green: {exc}")
+                logger.warning(f"Could not rename Green: {exc}")
 
             # ═══ Phase D: Deploy honeypot at old address ═
             # old_ip was captured from live Blue container before Phase C
@@ -443,9 +443,9 @@ class MigrationEngine:
             self._index_mutation(result)
 
             logger.info(
-                f"✅ [{migration_id[:8]}] Migration COMPLETE:\n"
-                f"   Blue:  {target_container_name} → TERMINATED\n"
-                f"   Green: {green_container.short_id} → ACTIVE ({green_ip})\n"
+                f"[{migration_id[:8]}] Migration COMPLETE:\n"
+                f"   Blue:  {target_container_name} -> TERMINATED\n"
+                f"   Green: {green_container.short_id} -> ACTIVE ({green_ip})\n"
                 f"   Trap:  Honeypot deployed at old IP ({old_ip})\n"
                 f"   Rollback available until: {result['can_rollback_until']}"
             )
@@ -453,14 +453,14 @@ class MigrationEngine:
             return result
 
         except docker.errors.DockerException as exc:
-            logger.error(f"❌ Docker error during migration: {exc}")
+            logger.error(f"Docker error during migration: {exc}")
             result["status"] = "FAILED"
             result["error"] = str(exc)
             self._index_audit(result)
             return result
         except Exception as exc:
             logger.error(
-                f"❌ Unexpected migration error: {exc}", exc_info=True,
+                f"Unexpected migration error: {exc}", exc_info=True,
             )
             result["status"] = "FAILED"
             result["error"] = str(exc)
@@ -516,16 +516,16 @@ class MigrationEngine:
             )
 
             logger.info(
-                f"🟢 [{short_id}] Green container created: "
+                f"[{short_id}] Green container created: "
                 f"{green.short_id} ({image})"
             )
             return green
 
         except docker.errors.ImageNotFound as exc:
-            logger.error(f"❌ Image not found for Green: {image} — {exc}")
+            logger.error(f"Image not found for Green: {image} - {exc}")
             return None
         except docker.errors.APIError as exc:
-            logger.error(f"❌ Docker API error creating Green: {exc}")
+            logger.error(f"Docker API error creating Green: {exc}")
             return None
 
     # ─── Health Check ──────────────────────────────────────
@@ -553,12 +553,12 @@ class MigrationEngine:
                     health_status = health.get("Status")
                     if health_status == "healthy":
                         logger.info(
-                            f"✅ Green health check: HEALTHY "
+                            f"Green health check: HEALTHY "
                             f"({time.time() - start:.0f}s)"
                         )
                         return True
                     elif health_status == "unhealthy":
-                        logger.error("❌ Green health check: UNHEALTHY")
+                        logger.error("Green health check: UNHEALTHY")
                         return False
                 else:
                     # No healthcheck defined — check if container is running
@@ -568,7 +568,7 @@ class MigrationEngine:
                         container.reload()
                         if container.status == "running":
                             logger.info(
-                                f"✅ Green is running (no healthcheck, "
+                                f"Green is running (no healthcheck, "
                                 f"settled after {time.time() - start:.0f}s)"
                             )
                             return True
@@ -579,7 +579,7 @@ class MigrationEngine:
             time.sleep(check_interval)
 
         logger.error(
-            f"❌ Green health check timed out after {timeout}s"
+            f"Green health check timed out after {timeout}s"
         )
         return False
 
@@ -610,13 +610,12 @@ class MigrationEngine:
             try:
                 green_container.stop(timeout=5)
                 green_container.remove(force=True)
-                logger.info(f"🗑️  [{short_id}] Green container cleaned up")
-            except Exception:
+                logger.info(f"[{short_id}] Green container cleaned up")            except Exception:
                 pass
         if green_network:
             try:
                 green_network.remove()
-                logger.info(f"🗑️  [{short_id}] Green network cleaned up")
+                logger.info(f"[{short_id}] Green network cleaned up")
             except Exception:
                 pass
 
@@ -677,7 +676,7 @@ class MigrationEngine:
                 )
             except Exception as exc:
                 logger.warning(
-                    f"⚠️  [{short_id}] Direct honeypot deployment failed: {exc}. "
+                    f"[{short_id}] Direct honeypot deployment failed: {exc}. "
                     f"Falling back to decoy manager queue."
                 )
 
@@ -723,12 +722,12 @@ class MigrationEngine:
             connection.close()
 
             logger.info(
-                f"🍯 [{short_id}] Honeypot deploy task sent "
+                f"[{short_id}] Honeypot deploy task sent "
                 f"for old address {old_ip}"
             )
         except Exception as exc:
             logger.warning(
-                f"⚠️  Failed to deploy post-migration honeypot via queue: {exc}"
+                f"Failed to deploy post-migration honeypot via queue: {exc}"
             )
 
     # ─── Rollback ──────────────────────────────────────────
@@ -795,7 +794,7 @@ class MigrationEngine:
                 current = self.docker.containers.get(original_name)
                 current.stop(timeout=10)
                 current.remove(force=True)
-                logger.info(f"🗑️  Removed current container: {original_name}")
+                logger.info(f"Removed current container: {original_name}")
             except docker.errors.NotFound:
                 pass
 

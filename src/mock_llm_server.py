@@ -8,6 +8,7 @@ import threading
 # Define ThreadingHTTPServer for Python < 3.7 or if not available
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+    request_queue_size = 64
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [MOCK-LLM] %(message)s")
@@ -202,19 +203,19 @@ class Handler(BaseHTTPRequestHandler):
         
         # 3. Router Logic (Context-Aware)
         if "REDSPEC" in full_context or "Red Team" in full_context:
-            logger.info("⚡ Handling RED TEAM prediction request")
+            logger.info("[RED TEAM] Handling prediction request")
             response_data = generate_red_team_response(full_context)
 
         elif any(kw in full_context for kw in ["T1003", "ssh", "honeypot", "decoy", "credential dump", "lateral", "brute force"]):
-            logger.info("⚡ Handling RED TEAM prediction (APT indicator detected)")
+            logger.info("[RED TEAM] Handling prediction (APT indicator detected)")
             response_data = generate_red_team_response(full_context)
             
         elif "Zero-Log" in full_context or "PREEMPTIVE" in full_context:
-            logger.info("🛡️ Handling ZERO-LOG preemptive request")
+            logger.info("[ZERO-LOG] Handling preemptive request")
             response_data = ZERO_LOG_RESPONSE
             
         else:
-            logger.info("📝 Handling STANDARD log analysis request")
+            logger.info("[STANDARD] Handling log analysis request")
             response_data = generate_default_response(full_context)
 
         # 4. Wrap in OpenAI ChatCompletion format
@@ -241,5 +242,5 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 if __name__ == "__main__":
-    logger.info(f"🚀 Context-Aware Mock LLM Server running on port {PORT}")
+    logger.info(f"[START] Context-Aware Mock LLM Server running on port {PORT}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

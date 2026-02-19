@@ -31,7 +31,7 @@ def test_pipeline_integration():
     2. Wait for cti-pipeline-worker to consume it.
     3. Query OpenSearch 'security-logs-knn' to verify it was indexed.
     """
-    print(f"🚀 Starting Integration Test: {QUEUE_NAME} -> Worker -> {INDEX_NAME}")
+    print(f"Starting Integration Test: {QUEUE_NAME} -> Worker -> {INDEX_NAME}")
 
     # 1. Generate Unique Test Message
     test_id = str(uuid.uuid4())
@@ -59,15 +59,15 @@ def test_pipeline_integration():
             properties=pika.BasicProperties(
                 delivery_mode=2,  # make message persistent
             ))
-        print(f"✅ [1/3] Published message ID {test_id} to RabbitMQ")
+        print(f"[1/3] Published message ID {test_id} to RabbitMQ")
         connection.close()
     except Exception as e:
-        print(f"❌ Failed to publish to RabbitMQ: {e}")
+        print(f"Failed to publish to RabbitMQ: {e}")
         return False
 
     # 3. Wait for Processing (Allow worker time to pick up and index)
     wait_time = 15
-    print(f"⏳ [2/3] Waiting {wait_time}s for worker processing...")
+    print(f"[2/3] Waiting {wait_time}s for worker processing...")
     time.sleep(wait_time)
 
     # 4. Verify in OpenSearch
@@ -90,15 +90,15 @@ def test_pipeline_integration():
         hits = response['hits']['total']['value']
         
         if hits > 0:
-            print(f"✅ [3/3] Success! Found document in OpenSearch: {response['hits']['hits'][0]['_id']}")
+            print(f"[3/3] Success! Found document in OpenSearch: {response['hits']['hits'][0]['_id']}")
             return True
         else:
-            print(f"❌ [3/3] Failed. Document not found in OpenSearch after wait.")
+            print(f"[3/3] Failed. Document not found in OpenSearch after wait.")
             # Debug: Print recent logs?
             return False
 
     except Exception as e:
-        print(f"❌ Failed to query OpenSearch: {e}")
+        print(f"[ERROR] Failed to query OpenSearch: {e}")
         return False
 
 if __name__ == "__main__":

@@ -70,13 +70,13 @@ class ProfileManager:
             self.opposite_map = metadata.get("opposite_map", {})
             self.profiles = data
             logger.info(
-                f"📋 Loaded {len(self.profiles)} obfuscation profiles "
+                f"Loaded {len(self.profiles)} obfuscation profiles "
                 f"from {os.path.basename(PROFILES_PATH)}"
             )
         except FileNotFoundError:
-            logger.warning(f"⚠️  Profiles file not found: {PROFILES_PATH}")
+            logger.warning(f"Profiles file not found: {PROFILES_PATH}")
         except json.JSONDecodeError as exc:
-            logger.error(f"❌ Invalid JSON in profiles: {exc}")
+            logger.error(f"Invalid JSON in profiles: {exc}")
 
     def select_profile(self, real_server: str) -> tuple:
         """
@@ -101,7 +101,7 @@ class ProfileManager:
             if keyword in real_lower:
                 if profile_key in self.profiles:
                     logger.info(
-                        f"🎭 Misdirection: real='{real_server}' → "
+                        f"Misdirection: real='{real_server}' -> "
                         f"spoof='{profile_key}'"
                     )
                     return profile_key, self.profiles[profile_key]
@@ -148,7 +148,7 @@ class ObfuscationEngine:
                     data = json.load(f)
                 self.active_rules = data.get("rules", {})
                 logger.info(
-                    f"📄 Loaded {len(self.active_rules)} existing "
+                    f"Loaded {len(self.active_rules)} existing "
                     f"obfuscation rules"
                 )
             except (json.JSONDecodeError, IOError):
@@ -189,7 +189,7 @@ class ObfuscationEngine:
 
         if not profile:
             logger.warning(
-                f"⚠️  No spoof profile available for '{target_service}'"
+                f"No spoof profile available for '{target_service}'"
             )
             return {}
 
@@ -226,7 +226,7 @@ class ObfuscationEngine:
         self._index_mutation(rule)
 
         logger.info(
-            f"🎭 Obfuscation rule created: {rule_id}\n"
+            f"Obfuscation rule created: {rule_id}\n"
             f"   Scanner:  {scanner_ip}\n"
             f"   Target:   {target_host} ({target_service})\n"
             f"   Spoofing: {profile_key} ({profile.get('server_header')})\n"
@@ -258,7 +258,7 @@ class ObfuscationEngine:
             except Exception:
                 pass
 
-            logger.info(f"🎭 Obfuscation rule removed: {scanner_ip} ({reason})")
+            logger.info(f"Obfuscation rule removed: {scanner_ip} ({reason})")
 
     # ─── TTL Pruning ──────────────────────────────────────
 
@@ -279,7 +279,7 @@ class ObfuscationEngine:
             self.remove_rule(ip, reason="TTL_EXPIRED")
 
         if expired:
-            logger.info(f"🧹 Pruned {len(expired)} expired obfuscation rules")
+            logger.info(f"Pruned {len(expired)} expired obfuscation rules")
 
         return len(expired)
 
@@ -298,24 +298,24 @@ class ObfuscationEngine:
                 timeout=10,
             )
             if result.returncode == 0:
-                logger.info("🔄 Nginx reloaded successfully")
+                logger.info("Nginx reloaded successfully")
                 return True
             else:
                 logger.error(
-                    f"❌ Nginx reload failed: {result.stderr}"
+                    f"Nginx reload failed: {result.stderr}"
                 )
                 return False
         except FileNotFoundError:
             logger.warning(
-                "⚠️  Nginx not found — running outside proxy container. "
+                "Nginx not found - running outside proxy container. "
                 "Rules written to file for manual reload."
             )
             return False
         except subprocess.TimeoutExpired:
-            logger.error("❌ Nginx reload timed out")
+            logger.error("Nginx reload timed out")
             return False
         except Exception as exc:
-            logger.error(f"❌ Nginx reload error: {exc}")
+            logger.error(f"Nginx reload error: {exc}")
             return False
 
     # ─── File I/O ─────────────────────────────────────────
@@ -335,7 +335,7 @@ class ObfuscationEngine:
             with open(RULES_OUTPUT_PATH, "w", encoding="utf-8") as f:
                 json.dump(output, f, indent=2, default=str)
         except IOError as exc:
-            logger.error(f"❌ Failed to write rules file: {exc}")
+            logger.error(f"Failed to write rules file: {exc}")
 
     # ─── OpenSearch Indexing ──────────────────────────────
 
@@ -353,7 +353,7 @@ class ObfuscationEngine:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to index mutation: {exc}")
+            logger.error(f"Failed to index mutation: {exc}")
 
     # ─── Status ───────────────────────────────────────────
 

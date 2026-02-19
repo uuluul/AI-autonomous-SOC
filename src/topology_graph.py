@@ -51,7 +51,7 @@ class TopologyGraph:
         self.firewall_rules: list = self.topology.get("firewall_rules", [])
 
         logger.info(
-            f"📡 Topology loaded: {len(self.adjacency)} nodes, "
+            f"Topology loaded: {len(self.adjacency)} nodes, "
             f"{len(self.zones)} zones, "
             f"{len(self.firewall_rules)} firewall rules"
         )
@@ -62,13 +62,13 @@ class TopologyGraph:
     def _load_json(path: str) -> dict:
         abs_path = os.path.abspath(path)
         if not os.path.exists(abs_path):
-            logger.warning(f"⚠️  File not found: {abs_path} — returning empty dict")
+            logger.warning(f"File not found: {abs_path} - returning empty dict")
             return {}
         try:
             with open(abs_path, "r", encoding="utf-8") as fh:
                 return json.load(fh)
         except (json.JSONDecodeError, IOError) as exc:
-            logger.error(f"❌ Failed to parse {abs_path}: {exc}")
+            logger.error(f"Failed to parse {abs_path}: {exc}")
             return {}
 
     def reload(self) -> None:
@@ -78,7 +78,7 @@ class TopologyGraph:
         self.adjacency = self.topology.get("adjacency", {})
         self.zones = self.topology.get("zones", {})
         self.firewall_rules = self.topology.get("firewall_rules", [])
-        logger.info("🔄 Topology reloaded from disk")
+        logger.info("Topology reloaded from disk")
 
     # ─── Core graph queries ──────────────────────────────────
 
@@ -94,7 +94,7 @@ class TopologyGraph:
         """
         if source_ip not in self.adjacency and source_ip not in self.assets:
             logger.warning(
-                f"⚠️  Source IP {source_ip} not in topology graph — "
+                f"Source IP {source_ip} not in topology graph - "
                 "returning empty reachable set"
             )
             return []

@@ -45,7 +45,7 @@ try:
 except ImportError:
     DOCKER_AVAILABLE = False
     logger.warning(
-        "⚠️  Docker SDK not installed. Decoy Manager will operate in "
+        "Docker SDK not installed. Decoy Manager will operate in "
         "DRY-RUN mode (predictions logged, no containers spawned)."
     )
 
@@ -175,7 +175,7 @@ def select_placement(kill_chain: list, topology: TopologyGraph) -> dict:
         The selected kill chain step with enriched asset_profile.
     """
     if not kill_chain:
-        logger.warning("⚠️  Empty kill chain — cannot select placement")
+        logger.warning("Empty kill chain - cannot select placement")
         return {}
 
     best_step = None
@@ -198,12 +198,12 @@ def select_placement(kill_chain: list, topology: TopologyGraph) -> dict:
 
     if best_step:
         logger.info(
-            f"📍 Placement selected: {best_step.get('target_host', '?')} "
-            f"({best_step.get('target_ip', '?')}) — "
+            f"Placement selected: {best_step.get('target_host', '?')} "
+            f"({best_step.get('target_ip', '?')}) - "
             f"score={best_step['placement_score']:.2f}"
         )
     else:
-        logger.warning("⚠️  No viable placement found in kill chain")
+        logger.warning("No viable placement found in kill chain")
 
     return best_step or {}
 
@@ -248,7 +248,7 @@ def create_isolated_network(
     )
 
     logger.info(
-        f"🔒 Isolated network created: {net_name} "
+        f"Isolated network created: {net_name} "
         f"(internal=True, subnet=172.30.{subnet_octet}.0/24)"
     )
     return network
@@ -303,7 +303,7 @@ def deploy_honeypot_container(
     )
 
     logger.info(
-        f"🍯 Honeypot deployed: {container.short_id} "
+        f"Honeypot deployed: {container.short_id} "
         f"({config.get('service_name', '?')}) on {network_name}"
     )
     return container.id
@@ -363,16 +363,16 @@ def deploy_fluent_bit_sidecar(
         prod_net = docker_client.networks.get(PRODUCTION_NETWORK)
         prod_net.connect(container)
         logger.info(
-            f"📡 Sidecar dual-homed: {container.short_id} → "
+            f"Sidecar dual-homed: {container.short_id} -> "
             f"{honeypot_network_name} + {PRODUCTION_NETWORK}"
         )
     except docker.errors.NotFound:
         logger.warning(
-            f"⚠️  Production network '{PRODUCTION_NETWORK}' not found. "
+            f"Production network '{PRODUCTION_NETWORK}' not found. "
             f"Sidecar will only operate on honeypot bridge."
         )
     except docker.errors.APIError as exc:
-        logger.warning(f"⚠️  Could not dual-home sidecar: {exc}")
+        logger.warning(f"Could not dual-home sidecar: {exc}")
 
     return container.id
 
@@ -395,7 +395,7 @@ class DecoyLifecycleManager:
         """Schedule the decoy for automatic teardown after TTL."""
         def _timer():
             time.sleep(ttl_hours * 3600)
-            logger.info(f"⏰ TTL expired for decoy {decoy_id[:8]} — tearing down")
+            logger.info(f"TTL expired for decoy {decoy_id[:8]} - tearing down")
             self.teardown_decoy(decoy_id, reason="TTL_EXPIRED")
 
         t = threading.Thread(target=_timer, daemon=True, name=f"ttl-{decoy_id[:8]}")
@@ -403,14 +403,14 @@ class DecoyLifecycleManager:
         self._teardown_threads[decoy_id] = t
 
         expires_at = (datetime.utcnow() + timedelta(hours=ttl_hours)).isoformat()
-        logger.info(f"⏰ Teardown scheduled: {decoy_id[:8]} in {ttl_hours}h (expires: {expires_at})")
+        logger.info(f"Teardown scheduled: {decoy_id[:8]} in {ttl_hours}h (expires: {expires_at})")
 
     # ─── Teardown ──────────────────────────────────────────
 
     def teardown_decoy(self, decoy_id: str, reason: str = "manual"):
         """Remove all Docker resources associated with a decoy."""
         if not self.docker:
-            logger.warning(f"⚠️  Docker unavailable — cannot teardown {decoy_id[:8]}")
+            logger.warning(f"Docker unavailable - cannot teardown {decoy_id[:8]}")
             return
 
         try:
@@ -423,29 +423,29 @@ class DecoyLifecycleManager:
             except docker.errors.NotFound:
                 logger.debug(f"  Honeypot container already removed: decoy-{decoy_id[:12]}")
             except docker.errors.APIError as exc:
-                logger.error(f"  ❌ Error removing honeypot: {exc}")
+                logger.error(f"  Error removing honeypot: {exc}")
 
             # 2. Stop & remove sidecar
             try:
                 sc = self.docker.containers.get(f"sidecar-{decoy_id[:12]}")
                 sc.stop(timeout=5)
                 sc.remove(force=True)
-                logger.info(f"  🗑️ Sidecar container removed: sidecar-{decoy_id[:12]}")
+                logger.info(f"  Sidecar container removed: sidecar-{decoy_id[:12]}")
             except docker.errors.NotFound:
                 logger.debug(f"  Sidecar already removed: sidecar-{decoy_id[:12]}")
             except docker.errors.APIError as exc:
-                logger.error(f"  ❌ Error removing sidecar: {exc}")
+                logger.error(f"  Error removing sidecar: {exc}")
 
             # 3. Remove isolated network bridge
             net_name = f"{HONEYPOT_NET_PREFIX}-{decoy_id[:8]}"
             try:
                 net = self.docker.networks.get(net_name)
                 net.remove()
-                logger.info(f"  🗑️ Network removed: {net_name}")
+                logger.info(f"  Network removed: {net_name}")
             except docker.errors.NotFound:
                 logger.debug(f"  Network already removed: {net_name}")
             except docker.errors.APIError as exc:
-                logger.error(f"  ❌ Error removing network: {exc}")
+                logger.error(f"  Error removing network: {exc}")
 
             # 4. Update OpenSearch state
             if self.os_client:
@@ -463,7 +463,7 @@ class DecoyLifecycleManager:
                 except Exception:
                     pass  # Best-effort state update
 
-            logger.info(f"✅ Decoy {decoy_id[:8]} fully torn down (reason: {reason})")
+            logger.info(f"Decoy {decoy_id[:8]} fully torn down (reason: {reason})")
 
         except Exception as exc:
             logger.error(f"❌ Teardown failed for {decoy_id[:8]}: {exc}")
@@ -493,13 +493,10 @@ class DecoyLifecycleManager:
 
             for c in excess:
                 did = c.labels.get("neovigil.decoy_id", "unknown")
-                logger.warning(
-                    f"🔄 Evicting decoy {did[:8]} (MAX_DECOYS={MAX_ACTIVE_DECOYS} exceeded)"
-                )
                 self.teardown_decoy(did, reason="MAX_DECOYS_EXCEEDED")
 
         except docker.errors.APIError as exc:
-            logger.error(f"❌ Error enforcing max decoys: {exc}")
+            logger.error(f"Error enforcing max decoys: {exc}")
 
     # ─── Orphan Cleanup ────────────────────────────────────
 
@@ -518,10 +515,10 @@ class DecoyLifecycleManager:
             ]
 
             if not all_honeypots:
-                logger.info("🧹 No orphan honeypots found")
+                logger.info("No orphan honeypots found")
                 return
 
-            logger.info(f"🧹 Found {len(all_honeypots)} existing honeypot container(s)")
+            logger.info(f"Found {len(all_honeypots)} existing honeypot container(s)")
             now = datetime.utcnow()
 
             for c in all_honeypots:
@@ -532,7 +529,7 @@ class DecoyLifecycleManager:
                     if age_hours > DEFAULT_TTL_HOURS * 2:
                         did = c.labels.get("neovigil.decoy_id", "unknown")
                         logger.warning(
-                            f"🧹 Orphan detected: {c.name} (age={age_hours:.1f}h) — tearing down"
+                            f"Orphan detected: {c.name} (age={age_hours:.1f}h) - tearing down"
                         )
                         c.stop(timeout=5)
                         c.remove(force=True)
@@ -543,14 +540,14 @@ class DecoyLifecycleManager:
             for net in self.docker.networks.list():
                 if net.name.startswith(HONEYPOT_NET_PREFIX):
                     if not net.containers:
-                        logger.info(f"🧹 Removing empty honeypot network: {net.name}")
+                        logger.info(f"Removing empty honeypot network: {net.name}")
                         try:
                             net.remove()
                         except docker.errors.APIError:
                             pass
 
         except docker.errors.APIError as exc:
-            logger.error(f"❌ Orphan cleanup error: {exc}")
+            logger.error(f"Orphan cleanup error: {exc}")
 
 
 # ════════════════════════════════════════════════════════════
@@ -575,7 +572,7 @@ def _save_state(state: dict):
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, default=str)
     except IOError as exc:
-        logger.error(f"❌ Failed to save state: {exc}")
+        logger.error(f"Failed to save state: {exc}")
 
 
 # ════════════════════════════════════════════════════════════
@@ -589,7 +586,7 @@ class DecoyManager:
     """
 
     def __init__(self):
-        logger.info("🧠 Initialising Decoy Manager …")
+        logger.info("Initialising Decoy Manager ...")
         self.topology = TopologyGraph()
         self.os_client = get_opensearch_client()
 
@@ -598,9 +595,9 @@ class DecoyManager:
             try:
                 self.docker = docker.from_env()
                 self.docker.ping()
-                logger.info("🐳 Docker daemon connected")
+                logger.info("Docker daemon connected")
             except docker.errors.DockerException as exc:
-                logger.error(f"❌ Docker daemon unreachable: {exc}")
+                logger.error(f"Docker daemon unreachable: {exc}")
                 self.docker = None
         else:
             self.docker = None
@@ -614,8 +611,8 @@ class DecoyManager:
         self.lifecycle.cleanup_orphans()
 
         logger.info(
-            f"✅ Decoy Manager initialised "
-            f"(docker={'✅' if self.docker else '❌ DRY-RUN'}, "
+            f"Decoy Manager initialised "
+            f"(docker={'YES' if self.docker else 'NO (DRYCHECK)'}, "
             f"max_decoys={MAX_ACTIVE_DECOYS}, ttl={DEFAULT_TTL_HOURS}h)"
         )
 
@@ -632,11 +629,11 @@ class DecoyManager:
             try:
                 if not self.os_client.indices.exists(index=index_name):
                     self.os_client.indices.create(index=index_name, body=mapping)
-                    logger.info(f"📦 Created index: {index_name}")
+                    logger.info(f"Created index: {index_name}")
                 else:
-                    logger.info(f"📦 Index exists: {index_name}")
+                    logger.info(f"Index exists: {index_name}")
             except Exception as exc:
-                logger.error(f"❌ Failed to create index {index_name}: {exc}")
+                logger.error(f"Failed to create index {index_name}: {exc}")
 
     # ─── Core Deployment Flow ─────────────────────────────
 
@@ -653,7 +650,7 @@ class DecoyManager:
         tenant_id = payload.get("tenant_id", "default")
 
         logger.info(
-            f"🎯 Processing deploy task for prediction {prediction_id[:8]} "
+            f"Processing deploy task for prediction {prediction_id[:8]} "
             f"({len(kill_chain)} kill chain steps)"
         )
 
@@ -668,7 +665,7 @@ class DecoyManager:
             ])
             if active_count >= MAX_ACTIVE_DECOYS:
                 logger.warning(
-                    f"⚠️  MAX_ACTIVE_DECOYS reached ({active_count}/{MAX_ACTIVE_DECOYS}). "
+                    f"MAX_ACTIVE_DECOYS reached ({active_count}/{MAX_ACTIVE_DECOYS}). "
                     f"Skipping deployment for prediction {prediction_id[:8]}"
                 )
                 return
@@ -676,7 +673,7 @@ class DecoyManager:
         # 2. Select best placement from kill chain
         placement = select_placement(kill_chain, self.topology)
         if not placement:
-            logger.warning(f"⚠️  No placement found for prediction {prediction_id[:8]}")
+            logger.warning(f"No placement found for prediction {prediction_id[:8]}")
             return
 
         # 3. Generate decoy template
@@ -690,7 +687,7 @@ class DecoyManager:
         # 5. Deploy (or dry-run)
         if not self.docker:
             logger.info(
-                f"🏜️  DRY-RUN: Would deploy '{config['service_name']}' decoy "
+                f"DRY-RUN: Would deploy '{config['service_name']}' decoy "
                 f"for target {placement.get('target_host', '?')} "
                 f"({placement.get('target_ip', '?')})"
             )
@@ -733,7 +730,7 @@ class DecoyManager:
             _save_state(self.state)
 
             logger.info(
-                f"✅ Decoy {decoy_id[:8]} fully operational:\n"
+                f"Decoy {decoy_id[:8]} fully operational:\n"
                 f"   Honeypot:  {container_id[:12]} ({config['service_name']})\n"
                 f"   Sidecar:   {sidecar_id[:12]}\n"
                 f"   Network:   {network.name} (internal=True)\n"
@@ -744,15 +741,15 @@ class DecoyManager:
 
         except docker.errors.ImageNotFound as exc:
             logger.error(
-                f"❌ Docker image not found: {config['image']}. "
+                f"Docker image not found: {config['image']}. "
                 f"Skipping deployment for {decoy_id[:8]}: {exc}"
             )
         except docker.errors.APIError as exc:
-            logger.error(f"❌ Docker API error during deployment: {exc}")
+            logger.error(f"Docker API error during deployment: {exc}")
             # Attempt partial cleanup
             self.lifecycle.teardown_decoy(decoy_id, reason="DEPLOY_FAILED")
         except Exception as exc:
-            logger.error(f"❌ Unexpected deployment error: {exc}", exc_info=True)
+            logger.error(f"Unexpected deployment error: {exc}", exc_info=True)
             self.lifecycle.teardown_decoy(decoy_id, reason="DEPLOY_FAILED")
 
     # ─── State Indexing ────────────────────────────────────
@@ -791,13 +788,13 @@ class DecoyManager:
                 index="decoy-state", id=decoy_id, body=doc, refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to index decoy state: {exc}")
+            logger.error(f"Failed to index decoy state: {exc}")
 
     # ─── RabbitMQ Consumer Loop ────────────────────────────
 
     def run(self):
         """Main event loop — consume from decoy_deploy_tasks queue."""
-        logger.info("🍯 Decoy Manager online — starting RabbitMQ consumer …")
+        logger.info("Decoy Manager online - starting RabbitMQ consumer ...")
 
         while True:
             try:

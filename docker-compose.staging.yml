@@ -38,7 +38,6 @@ services:
     networks:
       - staging-net
 
-  # ✅ IMPORTANT: run YOUR mock LLM server, not http.server
   mock-llm:
     image: python:3.9-slim
     container_name: mock-llm-staging
@@ -63,7 +62,6 @@ services:
     environment:
       - OPENSEARCH_HOST=opensearch
       - RABBITMQ_HOST=rabbitmq
-      # ✅ make sure your pipeline points to mock LLM
       - LLM_BASE_URL=http://mock-llm:8000
       - ROLE=master
       - LLM_PROVIDER=local
@@ -77,7 +75,6 @@ services:
         condition: service_healthy
     networks:
       - staging-net
-    # ✅ IMPORTANT: create indices first, then run pipeline
     command: ["bash", "-lc", "python /app/src/setup_opensearch.py && python -u /app/src/run_pipeline.py"]
 
   worker:

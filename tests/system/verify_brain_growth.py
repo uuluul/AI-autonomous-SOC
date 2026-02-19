@@ -34,7 +34,7 @@ def count_docs(client, indices):
     return counts
 
 def run_simulation():
-    print("🚀 Triggering APT Killchain Simulation...")
+    print("Triggering APT Killchain Simulation...")
     try:
         # Run the simulation script
         result = subprocess.run(
@@ -44,33 +44,33 @@ def run_simulation():
             timeout=120
         )
         if result.returncode != 0:
-            print(f"❌ Simulation failed: {result.stderr}")
+            print(f"Simulation failed: {result.stderr}")
             return False
         return True
     except Exception as e:
-        print(f"❌ Failed to run simulation script: {e}")
+        print(f"Failed to run simulation script: {e}")
         return False
 
 def verify_brain_growth():
-    print("🧠 Starting AI Brain Growth Verification...")
+    print("Starting AI Brain Growth Verification...")
     client = get_opensearch_client()
 
     # Step 1: Baseline Count
     initial_counts = count_docs(client, INDICES_TO_CHECK)
-    print(f"📊 Initial Knowledge Base State: {initial_counts}")
+    print(f"Initial Knowledge Base State: {initial_counts}")
 
     # Step 2: Trigger Simulation
     if not run_simulation():
         return False
 
     # Step 3: Wait for Pipeline Processing
-    wait_seconds = 15
-    print(f"⏳ Waiting {wait_seconds}s for ingestion and playbook generation...")
+    wait_seconds = 25
+    print(f"Waiting {wait_seconds}s for ingestion and playbook generation...")
     time.sleep(wait_seconds)
 
     # Step 4: Final Count
     final_counts = count_docs(client, INDICES_TO_CHECK)
-    print(f"📊 Final Knowledge Base State:   {final_counts}")
+    print(f"Final Knowledge Base State:   {final_counts}")
 
     # Step 5: Assert Growth
     growth_observed = False
@@ -79,19 +79,19 @@ def verify_brain_growth():
         final = final_counts.get(index, 0)
         
         if final > initial:
-            print(f"✅ Growth Confirmed in '{index}': {initial} -> {final} (+{final - initial})")
+            print(f"Growth Confirmed in '{index}': {initial} -> {final} (+{final - initial})")
             growth_observed = True
         elif final == initial:
-            print(f"⚠️ No growth in '{index}'. (This might be expected if simulation data was duplicate or pipeline stalled)")
+            print(f"[WARN] No growth in '{index}'. (This might be expected if simulation data was duplicate or pipeline stalled)")
         else:
-            print(f"❌ Data LOSS in '{index}'! {initial} -> {final}")
+            print(f"Data LOSS in '{index}'! {initial} -> {final}")
             return False
 
     if growth_observed:
-        print("✅ [PASS] The System is Learning! New data was successfully ingested and indexed.")
+        print("[PASS] The System is Learning! New data was successfully ingested and indexed.")
         return True
     else:
-        print("❌ [FAIL] No data accumulation detected across checked indices.")
+        print("[FAIL] No data accumulation detected across checked indices.")
         return False
 
 if __name__ == "__main__":

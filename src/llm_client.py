@@ -144,7 +144,7 @@ class LLMClient:
         # PRIVACY ENFORCEMENT
         if self.provider == "local":
             if "api.openai.com" in url or "azure.com" in url:
-                raise LocalLLMCriticalError("❌ PRIVACY SHIELD: Blocked unauthorized attempt to contact Cloud API in Local Mode (Strict Data Governance).")
+                raise LocalLLMCriticalError("PRIVACY SHIELD: Blocked unauthorized attempt to contact Cloud API in Local Mode (Strict Data Governance).")
 
 
         try:

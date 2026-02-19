@@ -233,7 +233,7 @@ class SignalGatherer:
             with open(ASSETS_PATH, "r", encoding="utf-8") as f:
                 self.assets = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            logger.warning("⚠️  Could not load assets.json")
+            logger.warning("Could not load assets.json")
 
     def gather_signals(self, trigger: dict) -> dict:
         """
@@ -351,9 +351,9 @@ class MTDController:
                             },
                         },
                     )
-                    logger.info(f"📁 Created index: {idx}")
+                    logger.info(f"Created index: {idx}")
             except Exception as exc:
-                logger.warning(f"⚠️  Could not create index {idx}: {exc}")
+                logger.warning(f"Could not create index {idx}: {exc}")
 
     # ─── Main Trigger Processing ──────────────────────────
 
@@ -372,7 +372,7 @@ class MTDController:
         trigger_source = trigger.get("trigger_source", "unknown")
 
         logger.info(
-            f"📨 [{trigger_id[:8]}] New MTD trigger from {trigger_source}"
+            f"[{trigger_id[:8]}] New MTD trigger from {trigger_source}"
         )
 
         # 1. Gather signals
@@ -382,7 +382,7 @@ class MTDController:
         score = compute_mtd_score(signals)
 
         logger.info(
-            f"📊 [{trigger_id[:8]}] MTD Score: {score}\n"
+            f"[{trigger_id[:8]}] MTD Score: {score}\n"
             f"   Components: pred_risk={signals['prediction_risk']}, "
             f"captures={signals['captures']}, "
             f"scans={signals['scan_count']}, "
@@ -394,7 +394,7 @@ class MTDController:
 
         if action["action_type"] == "none":
             logger.info(
-                f"⏭️  [{trigger_id[:8]}] Score {score} below threshold "
+                f"[{trigger_id[:8]}] Score {score} below threshold "
                 f"({THRESHOLD_OBFUSCATION}). No action."
             )
             return
@@ -436,7 +436,7 @@ class MTDController:
         action_record["execution_started"] = datetime.utcnow().isoformat()
 
         logger.info(
-            f"🚀 [{action_id}] Executing MTD action: "
+            f"[{action_id}] Executing MTD action: "
             f"{action_record['action_type']}"
         )
 
@@ -468,11 +468,11 @@ class MTDController:
                     self.obfuscation.reload_nginx()
 
                 logger.info(
-                    f"🎭 [{action_id}] Obfuscation applied for "
-                    f"{scanner_ip} → {rule.get('spoof_profile', 'N/A')}"
+                    f"[{action_id}] Obfuscation applied for "
+                    f"{scanner_ip} -> {rule.get('spoof_profile', 'N/A')}"
                 )
             except Exception as exc:
-                logger.error(f"❌ [{action_id}] Obfuscation failed: {exc}")
+                logger.error(f"[{action_id}] Obfuscation failed: {exc}")
 
         # ─── Migration ────────────────────────────────
         if action_record.get("migrate"):
@@ -488,11 +488,11 @@ class MTDController:
                 )
                 action_record["migration_result"] = result
                 logger.info(
-                    f"🔄 [{action_id}] Migration result: "
+                    f"[{action_id}] Migration result: "
                     f"{result.get('status', 'unknown')}"
                 )
             except Exception as exc:
-                logger.error(f"❌ [{action_id}] Migration failed: {exc}")
+                logger.error(f"[{action_id}] Migration failed: {exc}")
 
         # ─── Finalize ─────────────────────────────────
         action_record["status"] = "COMPLETED"
@@ -500,7 +500,7 @@ class MTDController:
         self._index_audit(action_record)
 
         logger.info(
-            f"✅ [{action_id}] MTD action completed: "
+            f"[{action_id}] MTD action completed: "
             f"{action_record['action_type']} (score={action_record['score']})"
         )
 
@@ -562,7 +562,7 @@ class MTDController:
             connection.close()
 
             logger.info(
-                f"🔔 [{action_id}] Submitted for approval:\n"
+                f"[{action_id}] Submitted for approval:\n"
                 f"   Type:    {action_record['action_type']}\n"
                 f"   Score:   {action_record['score']}\n"
                 f"   Target:  {target_host}\n"
@@ -571,7 +571,7 @@ class MTDController:
                 f"   Auto-execute at: {action_record['auto_execute_timestamp']}"
             )
         except Exception as exc:
-            logger.error(f"❌ Failed to submit for approval: {exc}")
+            logger.error(f"Failed to submit for approval: {exc}")
 
         # Index as pending
         self._index_audit(action_record)
@@ -596,7 +596,7 @@ class MTDController:
         action_record = self.pending_approvals.get(action_id)
         if not action_record:
             logger.warning(
-                f"⚠️  Approval for unknown action: {action_id}"
+                f"Approval for unknown action: {action_id}"
             )
             return
 
@@ -604,7 +604,7 @@ class MTDController:
         action = determine_action(action_record.get("score", 0))
         if not check_mtd_rbac(action, user_role):
             logger.warning(
-                f"🚫 [{action_id}] RBAC denied: role={user_role}, "
+                f"[{action_id}] RBAC denied: role={user_role}, "
                 f"required={action.get('min_role')}"
             )
             return
@@ -614,14 +614,14 @@ class MTDController:
             # The maintenance thread will force-execute after 300s
             auto_ts = action_record.get("auto_execute_timestamp", "N/A")
             logger.info(
-                f"⏳ [{action_id}] PENDING — awaiting analyst decision. "
+                f"[{action_id}] PENDING - awaiting analyst decision. "
                 f"Auto-execute at: {auto_ts}"
             )
             return
 
         if decision == "APPROVED":
             logger.info(
-                f"✅ [{action_id}] APPROVED by {approved_by} ({user_role})"
+                f"[{action_id}] APPROVED by {approved_by} ({user_role})"
             )
             action_record["status"] = "APPROVED"
             action_record["approved_by"] = approved_by
@@ -631,14 +631,14 @@ class MTDController:
             self._execute_action(action_record)
         elif decision == "REJECTED":
             logger.info(
-                f"❌ [{action_id}] REJECTED by {approved_by} ({user_role})"
+                f"[{action_id}] REJECTED by {approved_by} ({user_role})"
             )
             action_record["status"] = "REJECTED"
             action_record["rejected_by"] = approved_by
             action_record["rejected_at"] = datetime.utcnow().isoformat()
             self._index_audit(action_record)
         else:
-            logger.warning(f"⚠️  Unknown decision: {decision}")
+            logger.warning(f"Unknown decision: {decision}")
 
         # Remove from pending
         self.pending_approvals.pop(action_id, None)
@@ -673,7 +673,7 @@ class MTDController:
                 )
                 self._index_audit(record)
                 logger.warning(
-                    f"⏰ [{action_id}] ESCALATED: approval timed out "
+                    f"[{action_id}] ESCALATED: approval timed out "
                     f"after {APPROVAL_TIMEOUT_MINUTES}min"
                 )
 
@@ -697,7 +697,7 @@ class MTDController:
                 record["approved_by"] = "MTD-Auto-Force"
                 record["forced_at"] = now.isoformat()
                 logger.warning(
-                    f"⚡ [{action_id}] FORCE-EXECUTING: No human decision "
+                    f"[{action_id}] FORCE-EXECUTING: No human decision "
                     f"within 300s timeout. Autonomous intervention activated."
                 )
                 self._execute_action(record)
@@ -711,7 +711,7 @@ class MTDController:
             self.obfuscation.reload_nginx()
         self.check_approval_timeouts()
         logger.debug(
-            f"🔧 Maintenance tick: {len(self.pending_approvals)} pending actions"
+            f"Maintenance tick: {len(self.pending_approvals)} pending actions"
         )
 
     # ─── Rollback API ─────────────────────────────────────
@@ -777,7 +777,7 @@ class MTDController:
                 refresh=True,
             )
         except Exception as exc:
-            logger.error(f"❌ Audit indexing failed: {exc}")
+            logger.error(f"Audit indexing failed: {exc}")
 
 
 # ════════════════════════════════════════════════════════════

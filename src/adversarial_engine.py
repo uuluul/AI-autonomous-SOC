@@ -291,36 +291,36 @@ Output your analysis in the required JSON schema.
 
         # 5 — Call LLM (with full diagnostic logging)
         try:
-            logger.info(f"🔥 [REDSPEC] Calling LLM for adversarial prediction (pivot={pivot_ip})")
+            logger.info(f"[REDSPEC] Calling LLM for adversarial prediction (pivot={pivot_ip})")
             result = self.llm._call_openai_chat(
                 RED_TEAM_SYSTEM_PROMPT, user_prompt, is_json=True
             )
 
             # ── Diagnostic: log raw response so we can see exactly what arrived ──
-            logger.info(f"📩 [REDSPEC] RAW LLM RESPONSE: {json.dumps(result, default=str)[:2000]}")
+            logger.info(f"[REDSPEC] RAW LLM RESPONSE: {json.dumps(result, default=str)[:2000]}")
 
             if not isinstance(result, dict):
                 logger.error(
-                    f"❌ [REDSPEC] LLM returned non-dict type={type(result).__name__}. "
+                    f"[REDSPEC] LLM returned non-dict type={type(result).__name__}. "
                     f"Value: {str(result)[:500]}"
                 )
                 return {}
 
             if "predicted_kill_chain" not in result:
                 logger.error(
-                    f"❌ [REDSPEC] LLM JSON missing 'predicted_kill_chain'! "
+                    f"[REDSPEC] LLM JSON missing 'predicted_kill_chain'! "
                     f"Keys received: {list(result.keys())}. "
                     f"Full response: {json.dumps(result, default=str)[:1000]}"
                 )
             else:
                 chain = result["predicted_kill_chain"]
-                logger.info(f"✅ [REDSPEC] Got {len(chain)} kill chain steps from LLM")
+                logger.info(f"[REDSPEC] Got {len(chain)} kill chain steps from LLM")
 
             return result
 
         except Exception as exc:
             logger.error(
-                f"❌ [REDSPEC] Adversarial LLM call FAILED: {exc}",
+                f"[REDSPEC] Adversarial LLM call FAILED: {exc}",
                 exc_info=True,
             )
             return {}
@@ -348,13 +348,13 @@ class ZeroLogAnticipationEngine:
         affected_sw = event.get("affected_software", "")
         severity = event.get("severity", "UNKNOWN")
 
-        logger.info(f"🔍 Zero-Log scan: {cve_id} / {affected_sw} ({severity})")
+        logger.info(f"[Zero-Log] Scan: {cve_id} / {affected_sw} ({severity})")
 
         # 1 — Scan assets for matching software
         exposed_assets = self.topo.scan_assets_for_software(affected_sw)
 
         if not exposed_assets:
-            logger.info(f"✅ Zero-Log: No local exposure to {cve_id}")
+            logger.info(f"[Zero-Log] No local exposure to {cve_id}")
             return {"status": "CLEAN", "cve_id": cve_id}
 
         # 2 — Get CVE details from NVD
@@ -363,7 +363,7 @@ class ZeroLogAnticipationEngine:
             try:
                 cve_details = self.cve.get_cve_details(cve_id)
             except Exception as exc:
-                logger.warning(f"⚠️  NVD lookup failed for {cve_id}: {exc}")
+                logger.warning(f"NVD lookup failed for {cve_id}: {exc}")
 
         # 3 — Ask LLM for preemptive defense plan
         prediction = self._generate_preemptive_alert(
@@ -435,7 +435,7 @@ class ZeroLogAnticipationEngine:
             )
             return result if isinstance(result, dict) else {}
         except Exception as exc:
-            logger.error(f"❌ Zero-Log LLM call failed: {exc}")
+            logger.error(f"Zero-Log LLM call failed: {exc}")
             return {}
 
 
@@ -447,7 +447,7 @@ class AdversarialEngine:
     manages the RabbitMQ consumer loop."""
 
     def __init__(self):
-        logger.info("🧠 Initialising Adversarial Prediction Engine …")
+        logger.info("Initialising Adversarial Prediction Engine ...")
         self.llm = LLMClient()
         self.topo = TopologyGraph()
         self.cve = CVEEnricher()
@@ -460,7 +460,7 @@ class AdversarialEngine:
         self._dedup_cache: Dict[str, float] = {}
 
         self._ensure_index()
-        logger.info("✅ Adversarial Engine initialised")
+        logger.info("Adversarial Engine initialised")
 
     # ─── Index management ────────────────────────────────────
 
@@ -471,11 +471,11 @@ class AdversarialEngine:
                     index=PREDICTION_INDEX,
                     body=PREDICTION_INDEX_MAPPING,
                 )
-                logger.info(f"📦 Created OpenSearch index: {PREDICTION_INDEX}")
+                logger.info(f"[OpenSearch] Created index: {PREDICTION_INDEX}")
             else:
-                logger.info(f"📦 Index {PREDICTION_INDEX} already exists")
+                logger.info(f"[OpenSearch] Index {PREDICTION_INDEX} already exists")
         except Exception as exc:
-            logger.error(f"❌ Failed to create index {PREDICTION_INDEX}: {exc}")
+            logger.error(f"Failed to create index {PREDICTION_INDEX}: {exc}")
 
     # ─── De-duplication ──────────────────────────────────────
 
@@ -484,7 +484,7 @@ class AdversarialEngine:
         now = datetime.utcnow().timestamp()
         last = self._dedup_cache.get(key, 0)
         if now - last < DEDUP_WINDOW_SEC:
-            logger.info(f"⏭️  Duplicate prediction suppressed for {key}")
+            logger.info(f"Duplicate prediction suppressed for {key}")
             return True
         self._dedup_cache[key] = now
         return False
@@ -501,7 +501,7 @@ class AdversarialEngine:
         tenant_id = alert_data.get("tenant_id", "default")
         pivot_ip = target_ip or source_ip
 
-        logger.info(f"🎯 [{pred_id[:8]}] Prediction start: {source_ip} → {pivot_ip}")
+        logger.info(f"[{pred_id[:8]}] Prediction start: {source_ip} -> {pivot_ip}")
 
         # 1 — Topology
         reachable = self.topo.get_reachable_hosts(pivot_ip)
@@ -516,7 +516,7 @@ class AdversarialEngine:
             if isinstance(rag_raw, list):
                 rag_context = rag_raw
         except Exception as exc:
-            logger.warning(f"⚠️  RAG retrieval skipped: {exc}")
+            logger.warning(f"RAG retrieval skipped: {exc}")
 
         # 2b — Validated CTI: retrieve past True Positives from feedback loop
         try:
@@ -546,7 +546,7 @@ class AdversarialEngine:
                     )
             if vcti_hits:
                 logger.info(
-                    f"📚 [{pred_id[:8]}] Injected {len(vcti_hits)} validated "
+                    f"[{pred_id[:8]}] Injected {len(vcti_hits)} validated "
                     f"CTI documents into RAG context"
                 )
         except Exception as exc:
@@ -580,7 +580,7 @@ class AdversarialEngine:
                 original_reasoning = step.get("reasoning", step.get("exploit_rationale", ""))
                 step["confidence"] = max(step.get("confidence", 0.5) * 0.5, 0.3)  # Reduce but don't zero
                 step["reasoning"] = (
-                    f"⚠️ Reduced confidence — {tip} may be unreachable from {pivot_ip} "
+                    f"Reduced confidence - {tip} may be unreachable from {pivot_ip} "
                     f"(firewall/topology). Original: {original_reasoning}"
                 )
             validated_chain.append(step)
@@ -588,7 +588,7 @@ class AdversarialEngine:
         # ── HARDCODED FALLBACK: if LLM returned empty/broken, inject a realistic kill chain ──
         if not validated_chain:
             logger.warning(
-                f"⚠️ [{pred_id[:8]}] LLM returned EMPTY kill chain. "
+                f"[{pred_id[:8]}] LLM returned EMPTY kill chain. "
                 f"Injecting hardcoded fallback (Risk 95, 3 steps)."
             )
             validated_chain = [
@@ -704,7 +704,7 @@ class AdversarialEngine:
         }
 
         logger.info(
-            f"📊 [{pred_id[:8]}] Prediction doc built — "
+            f"[{pred_id[:8]}] Prediction doc built - "
             f"Risk: {risk_score}, Chain steps: {len(clean_chain)}, "
             f"Actions: {len(prediction_doc['recommended_actions'])}"
         )
@@ -719,7 +719,7 @@ class AdversarialEngine:
                 refresh=True,
             )
             logger.info(
-                f"✅ [{pred_id[:8]}] Prediction INDEXED to {PREDICTION_INDEX} — "
+                f"[{pred_id[:8]}] Prediction INDEXED to {PREDICTION_INDEX} - "
                 f"Risk: {prediction_doc['overall_risk_score']}"
             )
             
@@ -728,15 +728,15 @@ class AdversarialEngine:
                 soar_url = "http://soar-server:5000/analyze"
                 resp = requests.post(soar_url, json=prediction_doc, timeout=2)
                 if resp.status_code == 200:
-                    logger.info(f"🚀 [{pred_id[:8]}] Triggered SOAR analysis: {resp.json().get('playbook_id')}")
+                    logger.info(f"[{pred_id[:8]}] Triggered SOAR analysis: {resp.json().get('playbook_id')}")
                 else:
-                    logger.warning(f"⚠️  SOAR analysis failed: {resp.status_code} - {resp.text}")
+                    logger.warning(f"SOAR analysis failed: {resp.status_code} - {resp.text}")
             except Exception as soar_exc:
-                logger.warning(f"⚠️  Could not trigger SOAR: {soar_exc}")
+                logger.warning(f"Could not trigger SOAR: {soar_exc}")
 
         except Exception as exc:
             logger.error(
-                f"❌ Failed to index prediction {pred_id}: {exc}. "
+                f"Failed to index prediction {pred_id}: {exc}. "
                 f"Doc keys: {list(prediction_doc.keys())}",
                 exc_info=True,
             )
@@ -777,12 +777,12 @@ class AdversarialEngine:
                 )
                 deploy_conn.close()
                 logger.info(
-                    f"🍯 [{pred_id[:8]}] Decoy deploy task dispatched "
+                    f"[{pred_id[:8]}] Decoy deploy task dispatched "
                     f"(risk={prediction_doc['overall_risk_score']})"
                 )
             except Exception as deploy_exc:
                 logger.warning(
-                    f"⚠️  Failed to dispatch decoy deploy (non-critical): {deploy_exc}"
+                    f"Failed to dispatch decoy deploy (non-critical): {deploy_exc}"
                 )
 
         # ─── Phase 3: Trigger Moving Target Defense ──────────
