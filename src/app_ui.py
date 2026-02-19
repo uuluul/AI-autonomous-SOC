@@ -388,14 +388,29 @@ try:
 except ValueError:
     tenant_index = 0
 
+# 【多用戶架構 vs 單一用戶】
+
+# RBAC：
+# if role == "System_Owner":
+#     selected_tenant = st.sidebar.selectbox(
+#         "🏢 Active Tenant (SaaS Admin View)", 
+#         tenant_options, 
+#         index=tenant_index,
+#         key="active_tenant_widget",
+#         on_change=update_tenant
+#     )
+# else:
+#     st.session_state["selected_tenant_key"] = "tenant_alpha"
+#     selected_tenant = "tenant_alpha"
+#     st.sidebar.info("🏢 Current Environment: NeoVigil Enterprise")
+
 selected_tenant = st.sidebar.selectbox(
-    "🏢 Active Tenant", 
+    "🏢 Active Tenant (Demo Mode)", 
     tenant_options, 
     index=tenant_index,
     key="active_tenant_widget",
     on_change=update_tenant
 )
-
 
 
 if st.sidebar.button("Logout"):
