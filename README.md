@@ -1,15 +1,9 @@
 <div align="center">
 
-## 🛡️ NeoVigil: The Active Adversarial Architecture for Autonomous Cyber Defense
+# 🛡️ NeoVigil
+## The Active Adversarial Architecture for Autonomous Cyber Defense
 
 </div>
-
----
-
-### 🔗 [Live Architecture Demo](https://uuluul.github.io/AI-autonomous-SOC/)
-
----
-
 
 [![Architecture](https://img.shields.io/badge/Architecture-Active%20Adversarial%20Defense-blueviolet?style=flat)]()
 [![Phase](https://img.shields.io/badge/Active%20Defense-Triad%20Complete-brightgreen?style=flat)]()
@@ -20,6 +14,8 @@
 
 
 NeoVigil is a next-generation, AI-powered Security Operations Center that transcends passive detection. It constructs an **Active Defense Triad** — predicting attack paths before they materialize, deploying self-evolving deception to capture attacker tradecraft, and dynamically mutating the live attack surface to invalidate all adversary reconnaissance in real-time.
+
+🔗 [Live Architecture Demo](https://uuluul.github.io/AI-autonomous-SOC/)
 
 ---
 
