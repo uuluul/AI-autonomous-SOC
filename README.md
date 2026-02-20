@@ -6,6 +6,11 @@
 
 ---
 
+### 🔗 [Live Architecture Demo](https://uuluul.github.io/AI-autonomous-SOC/)
+
+---
+
+
 [![Architecture](https://img.shields.io/badge/Architecture-Active%20Adversarial%20Defense-blueviolet?style=flat)]()
 [![Phase](https://img.shields.io/badge/Active%20Defense-Triad%20Complete-brightgreen?style=flat)]()
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)]()
