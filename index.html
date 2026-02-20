@@ -1,0 +1,2441 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeoVigil · AI-Autonomous-SOC Architecture</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg: #060810;
+            --l1: #22d3ee;
+            --l1bg: rgba(34, 211, 238, .08);
+            --l1b: rgba(34, 211, 238, .25);
+            --l2: #a3e635;
+            --l2bg: rgba(163, 230, 53, .08);
+            --l2b: rgba(163, 230, 53, .25);
+            --l3: #f59e0b;
+            --l3bg: rgba(245, 158, 11, .08);
+            --l3b: rgba(245, 158, 11, .25);
+            --l4: #818cf8;
+            --l4bg: rgba(129, 140, 248, .08);
+            --l4b: rgba(129, 140, 248, .25);
+            --ph1: #06b6d4;
+            --ph2: #8b5cf6;
+            --ph3: #f59e0b;
+            --ph4: #ef4444;
+            --ph5: #10b981;
+            --text: #e2e8f0;
+            --muted: rgba(226, 232, 240, .4);
+            --border: rgba(255, 255, 255, .06);
+            --card: rgba(255, 255, 255, .025);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── BG ── */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background-image: linear-gradient(rgba(34, 211, 238, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(34, 211, 238, .025) 1px, transparent 1px);
+            background-size: 56px 56px;
+        }
+
+        .bg-g {
+            position: fixed;
+            pointer-events: none;
+            z-index: 0;
+            border-radius: 50%;
+            filter: blur(140px);
+            opacity: .12;
+        }
+
+        .bg-g.a {
+            width: 700px;
+            height: 700px;
+            top: -200px;
+            right: -100px;
+            background: #22d3ee;
+        }
+
+        .bg-g.b {
+            width: 500px;
+            height: 500px;
+            bottom: -100px;
+            left: -80px;
+            background: #818cf8;
+        }
+
+        .bg-g.c {
+            width: 400px;
+            height: 400px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #f59e0b;
+        }
+
+        .scanline {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            background: repeating-linear-gradient(to bottom, transparent 0, transparent 3px, rgba(0, 0, 0, .06) 3px, rgba(0, 0, 0, .06) 4px);
+        }
+
+        .sweep {
+            position: fixed;
+            top: -100%;
+            left: 0;
+            right: 0;
+            height: 300px;
+            pointer-events: none;
+            z-index: 1;
+            background: linear-gradient(to bottom, transparent, rgba(34, 211, 238, .02), transparent);
+            animation: sweep 12s linear infinite;
+        }
+
+        @keyframes sweep {
+            to {
+                top: 110%;
+            }
+        }
+
+        /* ── LANGUAGE TOGGLE ── */
+        .lang-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, .4);
+            backdrop-filter: blur(8px);
+            flex-shrink: 0;
+            position: absolute;
+            top: 40px;
+            right: 48px;
+        }
+
+        .lang-btn {
+            padding: 8px 18px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            transition: all .25s;
+            position: relative;
+        }
+
+        .lang-btn.active {
+            background: rgba(34, 211, 238, .12);
+            color: var(--l1);
+        }
+
+        .lang-btn:first-child {
+            border-right: 1px solid var(--border);
+        }
+
+        .lang-btn:hover:not(.active) {
+            color: var(--text);
+            background: rgba(255, 255, 255, .04);
+        }
+
+        /* ── HEADER ── */
+        header {
+            position: relative;
+            z-index: 10;
+            padding: 40px 48px 32px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .brand-eyebrow {
+            font-size: 11px;
+            letter-spacing: 5px;
+            color: var(--l1);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .brand-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(24px, 4vw, 46px);
+            font-weight: 900;
+            color: #fff;
+            line-height: 1;
+            text-shadow: 0 0 60px rgba(34, 211, 238, .3);
+        }
+
+        .brand-title em {
+            font-style: normal;
+            color: var(--l1);
+        }
+
+        .brand-ver {
+            display: inline-block;
+            margin-left: 12px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 13px;
+            color: var(--muted);
+            vertical-align: middle;
+        }
+
+        .brand-sub {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 12px;
+        }
+
+        .status-chips {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .02);
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            color: var(--muted);
+        }
+
+        .pip {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            animation: pip 2.2s ease-in-out infinite;
+        }
+
+        @keyframes pip {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: .2;
+                transform: scale(.7);
+            }
+        }
+
+        .pip.c {
+            background: var(--l1);
+            box-shadow: 0 0 8px var(--l1);
+        }
+
+        .pip.g {
+            background: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+            animation-delay: .5s;
+        }
+
+        .pip.y {
+            background: var(--l3);
+            box-shadow: 0 0 8px var(--l3);
+            animation-delay: 1s;
+        }
+
+        .pip.p {
+            background: var(--l4);
+            box-shadow: 0 0 8px var(--l4);
+            animation-delay: 1.5s;
+        }
+
+        /* ── LANG FADE ── */
+        [data-zh],
+        [data-en] {
+            transition: opacity .2s;
+        }
+
+        body.lang-en [data-zh] {
+            display: none;
+        }
+
+        body.lang-zh [data-en] {
+            display: none;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            position: relative;
+            z-index: 5;
+            padding: 40px 48px 80px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        /* ── LAYER ── */
+        .layer {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity .7s ease, transform .7s ease;
+        }
+
+        .layer.in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .layer-wrap {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--card);
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+        }
+
+        .layer-wrap.l1-w {
+            border-color: var(--l1b);
+        }
+
+        .layer-wrap.l2-w {
+            border-color: var(--l2b);
+        }
+
+        .layer-wrap.l3-w {
+            border-color: var(--l3b);
+        }
+
+        .layer-wrap.l4-w {
+            border-color: var(--l4b);
+        }
+
+        .layer-hd {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none;
+            transition: background .2s;
+        }
+
+        .layer-hd:hover {
+            background: rgba(255, 255, 255, .02);
+        }
+
+        .layer.collapsed .layer-hd {
+            border-bottom: none;
+        }
+
+        .layer.collapsed .layer-body {
+            display: none;
+        }
+
+        .lbadge {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .lname {
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .5px;
+        }
+
+        .lsub {
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 1.5px;
+            margin-left: 2px;
+        }
+
+        .ltoggle {
+            margin-left: auto;
+            font-size: 13px;
+            color: var(--muted);
+            transition: transform .3s;
+        }
+
+        .layer.collapsed .ltoggle {
+            transform: rotate(-90deg);
+        }
+
+        .l1-accent .lbadge {
+            background: var(--l1bg);
+            color: var(--l1);
+        }
+
+        .l1-accent .lname {
+            color: var(--l1);
+        }
+
+        .l1-accent .layer-hd {
+            border-left: 3px solid var(--l1);
+        }
+
+        .l2-accent .lbadge {
+            background: var(--l2bg);
+            color: var(--l2);
+        }
+
+        .l2-accent .lname {
+            color: var(--l2);
+        }
+
+        .l2-accent .layer-hd {
+            border-left: 3px solid var(--l2);
+        }
+
+        .l3-accent .lbadge {
+            background: var(--l3bg);
+            color: var(--l3);
+        }
+
+        .l3-accent .lname {
+            color: var(--l3);
+        }
+
+        .l3-accent .layer-hd {
+            border-left: 3px solid var(--l3);
+        }
+
+        .l4-accent .lbadge {
+            background: var(--l4bg);
+            color: var(--l4);
+        }
+
+        .l4-accent .lname {
+            color: var(--l4);
+        }
+
+        .l4-accent .layer-hd {
+            border-left: 3px solid var(--l4);
+        }
+
+        .layer-body {
+            padding: 24px;
+        }
+
+        /* ── INPUT CARDS ── */
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .input-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, .3);
+            padding: 20px;
+            transition: all .25s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .input-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity .3s;
+            border-radius: 12px;
+        }
+
+        .input-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .input-card:hover::before {
+            opacity: 1;
+        }
+
+        .ic-fluent {
+            border-color: rgba(34, 211, 238, .2);
+        }
+
+        .ic-fluent:hover {
+            border-color: var(--l1);
+            box-shadow: 0 8px 32px rgba(34, 211, 238, .15);
+        }
+
+        .ic-fluent::before {
+            background: radial-gradient(circle at 50% 0, rgba(34, 211, 238, .07), transparent 70%);
+        }
+
+        .ic-crawler {
+            border-color: rgba(163, 230, 53, .2);
+        }
+
+        .ic-crawler:hover {
+            border-color: var(--l2);
+            box-shadow: 0 8px 32px rgba(163, 230, 53, .15);
+        }
+
+        .ic-crawler::before {
+            background: radial-gradient(circle at 50% 0, rgba(163, 230, 53, .07), transparent 70%);
+        }
+
+        .ic-manual {
+            border-color: rgba(245, 158, 11, .2);
+        }
+
+        .ic-manual:hover {
+            border-color: var(--l3);
+            box-shadow: 0 8px 32px rgba(245, 158, 11, .15);
+        }
+
+        .ic-manual::before {
+            background: radial-gradient(circle at 50% 0, rgba(245, 158, 11, .07), transparent 70%);
+        }
+
+        .ic-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .ic-icon {
+            font-size: 30px;
+        }
+
+        .ic-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .ic-file {
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: .5px;
+            margin-top: 1px;
+        }
+
+        .ic-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .ic-step {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .step-dot {
+            min-width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: #000;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .step-text {
+            font-size: 12px;
+            color: rgba(226, 232, 240, .65);
+            line-height: 1.6;
+        }
+
+        .step-text strong {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .ic-routing {
+            margin-top: 14px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, .4);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .rt-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-right: 4px;
+        }
+
+        .rt-key {
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 4px;
+            letter-spacing: .5px;
+            font-weight: 500;
+        }
+
+        /* ── FLOW ARROW ── */
+        .flow-arrow {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 48px;
+            z-index: 6;
+        }
+
+        .fa-line {
+            flex: 1;
+            max-width: 200px;
+            height: 1px;
+        }
+
+        .fa-left {
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, .12));
+        }
+
+        .fa-right {
+            background: linear-gradient(to left, transparent, rgba(255, 255, 255, .12));
+        }
+
+        .fa-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            padding: 8px 18px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: rgba(0, 0, 0, .55);
+            backdrop-filter: blur(8px);
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--muted);
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .fa-label strong {
+            font-size: 12px;
+            letter-spacing: 1.5px;
+        }
+
+        .fa-track {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .fa-dot {
+            position: absolute;
+            width: 3px;
+            height: 14px;
+            border-radius: 2px;
+            left: -.5px;
+            animation: fdrop 1.8s linear infinite;
+        }
+
+        @keyframes fdrop {
+            from {
+                top: -10px;
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            to {
+                top: 110%;
+                opacity: 0;
+            }
+        }
+
+        /* ── RABBITMQ ── */
+        .mq-block {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .mq-visual {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .mq-queue {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 180px;
+            flex: 1;
+        }
+
+        .mq-q-title {
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .mq-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 13px;
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            background: rgba(0, 0, 0, .35);
+            font-size: 12px;
+            transition: all .2s;
+        }
+
+        .mq-item:hover {
+            border-color: var(--l2);
+            background: rgba(163, 230, 53, .05);
+        }
+
+        .mq-item .tag {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: .5px;
+            margin-right: 4px;
+            font-weight: 600;
+        }
+
+        .mq-arrow {
+            padding: 0 20px;
+            font-size: 22px;
+            color: var(--l2);
+            text-shadow: 0 0 12px var(--l2);
+            animation: mqa 1.5s ease-in-out infinite;
+        }
+
+        @keyframes mqa {
+
+            0%,
+            100% {
+                opacity: .4;
+                transform: translateX(0);
+            }
+
+            50% {
+                opacity: 1;
+                transform: translateX(4px);
+            }
+        }
+
+        .mq-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 16px 24px;
+            border: 2px solid rgba(163, 230, 53, .3);
+            border-radius: 12px;
+            background: rgba(163, 230, 53, .05);
+            min-width: 160px;
+            cursor: pointer;
+        }
+
+        .mq-center-icon {
+            font-size: 34px;
+        }
+
+        .mq-center-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--l2);
+        }
+
+        .mq-center-sub {
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .mq-priority {
+            margin-top: 12px;
+            padding: 11px 16px;
+            border-radius: 8px;
+            background: rgba(163, 230, 53, .05);
+            border: 1px dashed rgba(163, 230, 53, .2);
+            font-size: 12px;
+            color: rgba(226, 232, 240, .6);
+            line-height: 1.7;
+        }
+
+        .mq-priority strong {
+            color: var(--l2);
+        }
+
+        /* ── COMMANDER ── */
+        .phases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .phase-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, .35);
+            overflow: hidden;
+            cursor: pointer;
+            transition: all .25s;
+        }
+
+        .phase-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .ph-head {
+            padding: 14px 16px 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ph-num {
+            font-family: 'Syne', sans-serif;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 9px;
+            border-radius: 5px;
+            letter-spacing: 1px;
+        }
+
+        .ph-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .ph-sub {
+            font-size: 11px;
+            color: var(--muted);
+            padding: 0 16px 6px;
+            letter-spacing: .5px;
+        }
+
+        .ph-steps {
+            padding: 0 16px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ph-step {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .ph-step-n {
+            min-width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: #000;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .ph-step-t {
+            font-size: 11px;
+            color: rgba(226, 232, 240, .6);
+            line-height: 1.6;
+        }
+
+        .ph-step-t strong {
+            color: var(--text);
+        }
+
+        .ph-files {
+            padding: 8px 16px 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .ph-file {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, .05);
+            color: var(--muted);
+            letter-spacing: .3px;
+            border: 1px solid var(--border);
+        }
+
+        .ph-innov {
+            margin: 0 16px 14px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            line-height: 1.6;
+            display: flex;
+            gap: 7px;
+            align-items: flex-start;
+        }
+
+        .innov-star {
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .pc1 {
+            border-color: rgba(6, 182, 212, .25);
+        }
+
+        .pc1:hover {
+            border-color: var(--ph1);
+            box-shadow: 0 6px 24px rgba(6, 182, 212, .15);
+        }
+
+        .pc1 .ph-num {
+            background: rgba(6, 182, 212, .15);
+            color: var(--ph1);
+        }
+
+        .pc1 .ph-name {
+            color: var(--ph1);
+        }
+
+        .pc1 .ph-step-n {
+            background: var(--ph1);
+        }
+
+        .pc1 .ph-innov {
+            background: rgba(6, 182, 212, .07);
+            border: 1px solid rgba(6, 182, 212, .2);
+            color: rgba(6, 182, 212, .8);
+        }
+
+        .pc2 {
+            border-color: rgba(139, 92, 246, .25);
+        }
+
+        .pc2:hover {
+            border-color: var(--ph2);
+            box-shadow: 0 6px 24px rgba(139, 92, 246, .15);
+        }
+
+        .pc2 .ph-num {
+            background: rgba(139, 92, 246, .15);
+            color: var(--ph2);
+        }
+
+        .pc2 .ph-name {
+            color: var(--ph2);
+        }
+
+        .pc2 .ph-step-n {
+            background: var(--ph2);
+        }
+
+        .pc2 .ph-innov {
+            background: rgba(139, 92, 246, .07);
+            border: 1px solid rgba(139, 92, 246, .2);
+            color: rgba(139, 92, 246, .85);
+        }
+
+        .pc3 {
+            border-color: rgba(245, 158, 11, .25);
+        }
+
+        .pc3:hover {
+            border-color: var(--ph3);
+            box-shadow: 0 6px 24px rgba(245, 158, 11, .15);
+        }
+
+        .pc3 .ph-num {
+            background: rgba(245, 158, 11, .15);
+            color: var(--ph3);
+        }
+
+        .pc3 .ph-name {
+            color: var(--ph3);
+        }
+
+        .pc3 .ph-step-n {
+            background: var(--ph3);
+        }
+
+        .pc3 .ph-innov {
+            background: rgba(245, 158, 11, .07);
+            border: 1px solid rgba(245, 158, 11, .2);
+            color: rgba(245, 158, 11, .85);
+        }
+
+        .pc4 {
+            border-color: rgba(239, 68, 68, .25);
+        }
+
+        .pc4:hover {
+            border-color: var(--ph4);
+            box-shadow: 0 6px 24px rgba(239, 68, 68, .15);
+        }
+
+        .pc4 .ph-num {
+            background: rgba(239, 68, 68, .15);
+            color: var(--ph4);
+        }
+
+        .pc4 .ph-name {
+            color: var(--ph4);
+        }
+
+        .pc4 .ph-step-n {
+            background: var(--ph4);
+        }
+
+        .pc4 .ph-innov {
+            background: rgba(239, 68, 68, .07);
+            border: 1px solid rgba(239, 68, 68, .2);
+            color: rgba(239, 68, 68, .85);
+        }
+
+        .pc5 {
+            border-color: rgba(16, 185, 129, .25);
+        }
+
+        .pc5:hover {
+            border-color: var(--ph5);
+            box-shadow: 0 6px 24px rgba(16, 185, 129, .15);
+        }
+
+        .pc5 .ph-num {
+            background: rgba(16, 185, 129, .15);
+            color: var(--ph5);
+        }
+
+        .pc5 .ph-name {
+            color: var(--ph5);
+        }
+
+        .pc5 .ph-step-n {
+            background: var(--ph5);
+        }
+
+        .pc5 .ph-innov {
+            background: rgba(16, 185, 129, .07);
+            border: 1px solid rgba(16, 185, 129, .2);
+            color: rgba(16, 185, 129, .85);
+        }
+
+        .cmd-strip {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: rgba(245, 158, 11, .05);
+            border-bottom: 1px solid rgba(245, 158, 11, .15);
+            flex-wrap: wrap;
+        }
+
+        .cmd-icon {
+            font-size: 36px;
+        }
+
+        .cmd-info {
+            flex: 1;
+        }
+
+        .cmd-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--l3);
+        }
+
+        .cmd-desc {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 3px;
+            line-height: 1.6;
+        }
+
+        .cmd-queues {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .cmd-q {
+            font-size: 11px;
+            padding: 4px 12px;
+            border-radius: 5px;
+            background: rgba(245, 158, 11, .1);
+            color: var(--l3);
+            border: 1px solid rgba(245, 158, 11, .25);
+            letter-spacing: .5px;
+        }
+
+        .score-bar {
+            display: flex;
+            gap: 10px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+
+        .score-chip {
+            padding: 8px 16px;
+            border-radius: 7px;
+            font-size: 12px;
+            line-height: 1.5;
+            flex: 1;
+            min-width: 160px;
+        }
+
+        .sc-warn {
+            background: rgba(245, 158, 11, .1);
+            border: 1px solid rgba(245, 158, 11, .3);
+            color: rgba(245, 158, 11, .9);
+        }
+
+        .sc-crit {
+            background: rgba(239, 68, 68, .1);
+            border: 1px solid rgba(239, 68, 68, .3);
+            color: rgba(239, 68, 68, .9);
+        }
+
+        .score-chip strong {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        /* ── OUTPUT ── */
+        .output-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .out-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, .3);
+            padding: 20px;
+            cursor: pointer;
+            transition: all .25s;
+        }
+
+        .out-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .oc-dash,
+        .oc-pdf {
+            border-color: rgba(129, 140, 248, .2);
+        }
+
+        .oc-dash:hover,
+        .oc-pdf:hover {
+            border-color: var(--l4);
+            box-shadow: 0 6px 24px rgba(129, 140, 248, .15);
+        }
+
+        .oc-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .oc-icon {
+            font-size: 26px;
+        }
+
+        .oc-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--l4);
+        }
+
+        .oc-features .oc-feat strong,
+        .oc-features .oc-feat strong span {
+            color: #fff !important;
+            font-weight: 700 !important;
+        }
+
+        .oc-file {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .oc-features {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .oc-feat {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding-left: 14px;
+            position: relative;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .oc-feat::before {
+            content: '›';
+            color: var(--l4);
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+
+        .oc-feat strong {
+            color: var(--text);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .oc-feat span {
+            color: rgba(226, 232, 240, .55);
+        }
+
+        /* ── GITHUB BANNER ── */
+        .gh-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 18px 24px;
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, .03), rgba(255, 255, 255, .01));
+            text-decoration: none;
+            color: var(--text);
+            transition: all .25s;
+            backdrop-filter: blur(10px);
+        }
+
+        .gh-banner:hover {
+            border-color: rgba(255, 255, 255, .22);
+            background: rgba(255, 255, 255, .05);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, .4);
+        }
+
+        .gh-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .gh-icon {
+            width: 28px;
+            height: 28px;
+            color: rgba(226, 232, 240, .7);
+            flex-shrink: 0;
+            transition: color .2s;
+        }
+
+        .gh-banner:hover .gh-icon {
+            color: #fff;
+        }
+
+        .gh-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: .3px;
+        }
+
+        .gh-desc {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        .gh-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .gh-btn {
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .07);
+            border: 1px solid rgba(255, 255, 255, .12);
+            color: rgba(226, 232, 240, .85);
+            letter-spacing: .5px;
+            white-space: nowrap;
+            transition: all .2s;
+        }
+
+        .gh-banner:hover .gh-btn {
+            background: rgba(255, 255, 255, .12);
+            border-color: rgba(255, 255, 255, .25);
+            color: #fff;
+        }
+
+        .gh-arrow {
+            font-size: 20px;
+            color: var(--muted);
+            transition: transform .2s, color .2s;
+        }
+
+        .gh-banner:hover .gh-arrow {
+            transform: translate(3px, -3px);
+            color: #fff;
+        }
+
+        /* ── DETAIL PANEL ── */
+        .detail-panel {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 340px;
+            background: rgba(6, 8, 16, .97);
+            border: 1px solid rgba(34, 211, 238, .25);
+            border-radius: 14px;
+            padding: 22px;
+            z-index: 200;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, .7), 0 0 0 1px rgba(34, 211, 238, .08) inset;
+            transform: translateY(130%);
+            transition: transform .4s cubic-bezier(.34, 1.56, .64, 1);
+            backdrop-filter: blur(20px);
+        }
+
+        .detail-panel.show {
+            transform: translateY(0);
+        }
+
+        .dp-close {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            font-size: 18px;
+            color: var(--muted);
+            cursor: pointer;
+            transition: color .2s;
+        }
+
+        .dp-close:hover {
+            color: #fff;
+        }
+
+        .dp-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .dp-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .dp-body {
+            font-size: 12px;
+            line-height: 1.8;
+            color: rgba(226, 232, 240, .65);
+        }
+
+        .dp-steps {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .dp-step {
+            display: flex;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .dp-step-n {
+            min-width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: #000;
+            flex-shrink: 0;
+        }
+
+        .dp-tag {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 10px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        @media(max-width:700px) {
+            header {
+                padding: 24px 20px 20px;
+            }
+
+            .main {
+                padding: 20px 16px 60px;
+            }
+
+            .layer-body {
+                padding: 16px;
+            }
+
+            .detail-panel {
+                width: calc(100vw - 32px);
+                right: 16px;
+            }
+
+            .cmd-strip {
+                padding: 12px 16px;
+            }
+
+            .gh-banner {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .gh-right {
+                width: 100%;
+            }
+
+            .header-right {
+                align-items: flex-start;
+            }
+
+            .lang-toggle {
+                top: 24px;
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body class="lang-zh">
+
+    <div class="bg-grid"></div>
+    <div class="bg-g a"></div>
+    <div class="bg-g b"></div>
+    <div class="bg-g c"></div>
+    <div class="scanline"></div>
+    <div class="sweep"></div>
+
+    <header>
+        <div>
+            <div class="brand-eyebrow">NeoVigil · System Architecture v3.0</div>
+            <div class="brand-title"><em>AI-Autonomous</em>-SOC<span class="brand-ver">// v3.0</span></div>
+            <div class="brand-sub">
+                <span data-zh>微服務 · 四層架構 · 五階段防禦週期</span>
+                <span data-en>Microservice · 4-Layer Architecture · 5-Phase Defense Lifecycle</span>
+            </div>
+        </div>
+        <div class="header-right" style="align-items:flex-end;">
+            <!-- Language Toggle -->
+            <div class="lang-toggle" style="align-self:flex-end;">
+                <button class="lang-btn active" id="btnZH" onclick="setLang('zh')">中文</button>
+                <button class="lang-btn" id="btnEN" onclick="setLang('en')">EN</button>
+            </div>
+            <div class="status-chips">
+                <div class="chip"><span class="pip c"></span>FLUENT BIT STREAMING</div>
+                <div class="chip"><span class="pip g"></span>RABBITMQ ONLINE</div>
+                <div class="chip"><span class="pip y"></span>COMMANDER AI ACTIVE</div>
+                <div class="chip"><span class="pip p"></span>DASHBOARD LIVE</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="main">
+
+        <!-- ══ GITHUB BANNER ══ -->
+        <div class="layer" id="ghbanner">
+            <a href="https://github.com/uuluul/AI-autonomous-SOC" target="_blank" rel="noopener" class="gh-banner">
+                <div class="gh-left">
+                    <svg class="gh-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+                    </svg>
+                    <div>
+                        <div class="gh-title">uuluul / AI-autonomous-SOC</div>
+                        <div class="gh-desc">
+                            <span data-zh>在 GitHub 查看原始碼、文件，歡迎貢獻與 Star</span>
+                            <span data-en>View source code, documentation, and contribute to the project on
+                                GitHub</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="gh-right">
+                    <span class="gh-btn">⭐ Star on GitHub</span>
+                    <span class="gh-arrow">↗</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- ══ LAYER 1 ══ -->
+        <div class="layer l1-accent" id="ly1">
+            <div class="layer-wrap l1-w">
+                <div class="layer-hd" onclick="tog('ly1')">
+                    <span class="lbadge">LAYER 01</span>
+                    <span class="lname"><span data-zh>情報蒐集與邊緣輸入層</span><span data-en>Input & Recon Sources</span></span>
+                    <span class="lsub">INPUT & RECON SOURCES</span>
+                    <span class="ltoggle">▾</span>
+                </div>
+                <div class="layer-body">
+                    <div class="input-grid">
+
+                        <!-- Fluent Bit -->
+                        <div class="input-card ic-fluent" onclick="showD('fluent')">
+                            <div class="ic-header">
+                                <span class="ic-icon">🛡️</span>
+                                <div>
+                                    <div class="ic-title">Fluent Bit</div>
+                                    <div class="ic-file">fluent_bit.conf · honeypot_fluent_bit.conf</div>
+                                </div>
+                            </div>
+                            <div class="ic-steps">
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#22d3ee">S1</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>收集 Log</strong> — 從各伺服器、K8s 節點、防火牆收集原始 Log，不做 AI
+                                            分析。</span>
+                                        <span data-en><strong>Collect Logs</strong> — Gathers raw logs from servers, K8s
+                                            nodes, and firewalls. No AI analysis at this stage.</span>
+                                    </div>
+                                </div>
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#22d3ee">S2</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>貼 Routing Key 標籤</strong> — 依來源自動貼標籤後送入 RabbitMQ。</span>
+                                        <span data-en><strong>Tag with Routing Keys</strong> — Automatically labels logs
+                                            by source, then publishes to RabbitMQ.</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ic-routing">
+                                <span class="rt-label">Routing Keys →</span>
+                                <span class="rt-key"
+                                    style="background:rgba(34,211,238,.12);color:#22d3ee">log.network</span>
+                                <span class="rt-key"
+                                    style="background:rgba(34,211,238,.12);color:#22d3ee">log.endpoint</span>
+                                <span class="rt-key"
+                                    style="background:rgba(34,211,238,.12);color:#22d3ee">log.identity</span>
+                                <span class="rt-key"
+                                    style="background:rgba(139,92,246,.12);color:#8b5cf6">honeypot.*</span>
+                            </div>
+                        </div>
+
+                        <!-- Intelligence Crawler -->
+                        <div class="input-card ic-crawler" onclick="showD('crawler')">
+                            <div class="ic-header">
+                                <span class="ic-icon">🕵️‍♂️</span>
+                                <div>
+                                    <div class="ic-title">Intelligence Crawler</div>
+                                    <div class="ic-file">intelligence_crawler.py · <span data-zh>獨立排程腳本</span><span
+                                            data-en>Scheduled standalone script</span></div>
+                                </div>
+                            </div>
+                            <div class="ic-steps">
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#a3e635">S0</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>定時主動出任務</strong> — 每小時巡邏 NVD、AlienVault、ISAC、暗網，抓取最新 0-day
+                                            與惡意 IP/Domain IOC。</span>
+                                        <span data-en><strong>Scheduled Patrol</strong> — Hourly crawl of NVD,
+                                            AlienVault, ISAC, and dark web to harvest the latest 0-days and malicious
+                                            IP/Domain IOCs.</span>
+                                    </div>
+                                </div>
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#a3e635">S1</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>打包成標準 JSON</strong> — 整理情資，貼上最高機密標籤送入 RabbitMQ。</span>
+                                        <span data-en><strong>Package as Standard JSON</strong> — Formats intel, tags
+                                            it, and publishes to RabbitMQ.</span>
+                                    </div>
+                                </div>
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#a3e635">S2</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>Commander AI 接收</strong> — 存入 OpenSearch 知識庫 + 啟動 CVE 比對 +
+                                            事前封鎖惡意 IP。</span>
+                                        <span data-en><strong>Commander AI Receives</strong> — Stores in OpenSearch +
+                                            triggers CVE matching + proactively blocks malicious IPs.</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ic-routing">
+                                <span class="rt-label">Routing Keys →</span>
+                                <span class="rt-key"
+                                    style="background:rgba(163,230,53,.12);color:#a3e635">intel.external</span>
+                                <span class="rt-key"
+                                    style="background:rgba(163,230,53,.12);color:#a3e635">alert.ioc</span>
+                            </div>
+                        </div>
+
+                        <!-- Manual Input -->
+                        <div class="input-card ic-manual" onclick="showD('manual')">
+                            <div class="ic-header">
+                                <span class="ic-icon">👤</span>
+                                <div>
+                                    <div class="ic-title">Manual Input</div>
+                                    <div class="ic-file">app_ui.py · <span data-zh>人工上傳介面</span><span data-en>Human
+                                            upload interface</span></div>
+                                </div>
+                            </div>
+                            <div class="ic-steps">
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#f59e0b">S1</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>IT 人員上傳</strong> — 透過 Dashboard UI 手動上傳 Log 或 STIX
+                                            威脅報告。</span>
+                                        <span data-en><strong>IT Staff Upload</strong> — Manually uploads logs or STIX
+                                            threat reports via the Dashboard UI.</span>
+                                    </div>
+                                </div>
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#f59e0b">S2</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>貼「人工報案」標籤入隊</strong> — 不直接呼叫 LLM，送入 RabbitMQ 排隊。100
+                                            人同時上傳也不會崩潰。</span>
+                                        <span data-en><strong>Tag & Queue</strong> — Does NOT call the LLM directly.
+                                            Publishes to RabbitMQ. 100 concurrent uploads won't crash the system.</span>
+                                    </div>
+                                </div>
+                                <div class="ic-step">
+                                    <div class="step-dot" style="background:#f59e0b">S3</div>
+                                    <div class="step-text">
+                                        <span data-zh><strong>最高優先級處理</strong> — Commander AI 給予 manual
+                                            最高優先級，優先分析。</span>
+                                        <span data-en><strong>Highest Priority Processing</strong> — Commander AI gives
+                                            manual reports the highest priority queue slot.</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ic-routing">
+                                <span class="rt-label">Routing Keys →</span>
+                                <span class="rt-key"
+                                    style="background:rgba(245,158,11,.12);color:#f59e0b">alert.manual_upload</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLOW 1→2 -->
+        <div class="flow-arrow">
+            <div class="fa-track">
+                <div class="fa-dot" style="background:var(--l1);animation-delay:0s"></div>
+                <div class="fa-dot" style="background:var(--l1);animation-delay:.9s;opacity:.4"></div>
+            </div>
+            <div class="fa-line fa-left"></div>
+            <div class="fa-label">
+                <strong><span data-zh>所有原始資料 → RabbitMQ 物流總局</span><span data-en>All Raw Data → RabbitMQ Message
+                        Hub</span></strong>
+                <span><span data-zh>Routing Key 分流 · 統一送入內部佇列</span><span data-en>Routed by key · unified internal
+                        queue</span></span>
+            </div>
+            <div class="fa-line fa-right"></div>
+        </div>
+
+        <!-- ══ LAYER 2 ══ -->
+        <div class="layer l2-accent" id="ly2" style="transition-delay:.15s">
+            <div class="layer-wrap l2-w">
+                <div class="layer-hd" onclick="tog('ly2')">
+                    <span class="lbadge">LAYER 02</span>
+                    <span class="lname"><span data-zh>中樞物流與任務分派層</span><span data-en>Message Broker & Dispatch
+                            Hub</span></span>
+                    <span class="lsub">RABBITMQ · MESSAGE BROKER HUB</span>
+                    <span class="ltoggle">▾</span>
+                </div>
+                <div class="layer-body">
+                    <div class="mq-block">
+                        <div class="mq-visual">
+                            <div class="mq-queue">
+                                <div class="mq-q-title">📥 <span data-zh>Incoming Channels</span><span data-en>Incoming
+                                        Channels</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.network</span><span
+                                        data-zh>網路防火牆日誌</span><span data-en>Network firewall logs</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.endpoint</span><span
+                                        data-zh>Windows 端點事件</span><span data-en>Windows endpoint events</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.identity</span><span
+                                        data-zh>帳號行為日誌</span><span data-en>Identity behavior logs</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(139,92,246,.15);color:#8b5cf6">honeypot.*</span><span
+                                        data-zh>蜜罐互動流量</span><span data-en>Honeypot interaction traffic</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(163,230,53,.15);color:#a3e635">intel.external</span><span
+                                        data-zh>外部 IOC 情資</span><span data-en>External IOC intelligence</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(163,230,53,.15);color:#a3e635">alert.ioc</span><span
+                                        data-zh>最新漏洞通報</span><span data-en>Latest vulnerability alerts</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(245,158,11,.15);color:#f59e0b">alert.manual</span><span
+                                        data-zh>人工報案上傳</span><span data-en>Manual case upload</span></div>
+                            </div>
+                            <div class="mq-arrow">⟶</div>
+                            <div class="mq-center" onclick="showD('rabbitmq')">
+                                <span class="mq-center-icon">🚚</span>
+                                <span class="mq-center-name">RabbitMQ</span>
+                                <span class="mq-center-sub">AMQP · <span data-zh>優先級佇列<br>零丟失 · Dead Letter
+                                        Queue</span><span data-en>Priority Queue<br>Zero-loss · Dead Letter
+                                        Queue</span></span>
+                            </div>
+                            <div class="mq-arrow">⟶</div>
+                            <div class="mq-queue">
+                                <div class="mq-q-title">📤 <span data-zh>AI Agent Workers (邊緣過濾)</span><span data-en>AI
+                                        Agent Workers (Edge Filter)</span></div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.network</span>🚦
+                                    Network AI Worker</div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.endpoint</span>💻
+                                    Endpoint AI Worker</div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(34,211,238,.15);color:#22d3ee">log.identity</span>🔑
+                                    Identity AI Worker</div>
+                                <div style="height:1px;background:var(--border);margin:6px 0;"></div>
+                                <div class="mq-q-title" style="margin-top:4px">📤 Commander AI (<span
+                                        data-zh>直達</span><span data-en>Direct</span>)</div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(239,68,68,.15);color:#ef4444">alert.critical</span>🧠
+                                    Commander AI</div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(163,230,53,.15);color:#a3e635">intel.external</span>🧠
+                                    Commander AI</div>
+                                <div class="mq-item"><span class="tag"
+                                        style="background:rgba(245,158,11,.15);color:#f59e0b">alert.manual</span>🧠
+                                    Commander AI</div>
+                            </div>
+                        </div>
+                        <div class="mq-priority">
+                            <span data-zh><strong>AI Worker 邊緣過濾邏輯：</strong>各 Worker 以<strong>小型輕量 AI
+                                    模型</strong>做秒級雜訊過濾。正常流量 → <strong>Drop（大腦永不被打擾）</strong>。異常流量 → 打包為 <strong
+                                    style="color:#ef4444">alert.critical</strong> 再次送回 RabbitMQ，由 Commander AI
+                                接手深度分析。</span>
+                            <span data-en><strong>AI Worker Edge-Filter Logic:</strong> Each Worker uses a
+                                <strong>lightweight AI model</strong> for sub-second noise filtering. Normal traffic →
+                                <strong>Drop (brain is never disturbed)</strong>. Anomalous traffic → packaged as
+                                <strong style="color:#ef4444">alert.critical</strong> and re-queued to RabbitMQ for
+                                Commander AI deep analysis.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLOW 2→3 -->
+        <div class="flow-arrow">
+            <div class="fa-track">
+                <div class="fa-dot" style="background:var(--l2);animation-delay:.3s"></div>
+                <div class="fa-dot" style="background:var(--l2);animation-delay:1.2s;opacity:.4"></div>
+            </div>
+            <div class="fa-line fa-left"></div>
+            <div class="fa-label">
+                <strong>alert.critical / intel.external / alert.manual → Commander AI</strong>
+                <span><span data-zh>只有高危案件才會喚醒最強大的 LLM</span><span data-en>Only high-risk cases wake the most powerful
+                        LLM</span></span>
+            </div>
+            <div class="fa-line fa-right"></div>
+        </div>
+
+        <!-- ══ LAYER 3 ══ -->
+        <div class="layer l3-accent" id="ly3" style="transition-delay:.3s">
+            <div class="layer-wrap l3-w">
+                <div class="layer-hd" onclick="tog('ly3')">
+                    <span class="lbadge">LAYER 03</span>
+                    <span class="lname"><span data-zh>Commander AI · 五階段防禦生命週期</span><span data-en>Commander AI ·
+                            5-Phase Defense Lifecycle</span></span>
+                    <span class="lsub">CORE LLM PIPELINE · run_pipeline.py · llm_client.py</span>
+                    <span class="ltoggle">▾</span>
+                </div>
+                <div class="layer-body" style="padding:0;">
+                    <div class="cmd-strip">
+                        <span class="cmd-icon">🧠</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">Commander AI — <span data-zh>執行長大腦</span><span data-en>The CEO
+                                    Brain</span></div>
+                            <div class="cmd-desc">
+                                <span data-zh>監聽三個高危頻道 · 啟動最強 LLM 進行跨維度深度分析 · 下達五階段防禦決策</span>
+                                <span data-en>Monitors 3 high-risk channels · Activates the most powerful LLM for
+                                    multi-dimensional analysis · Issues 5-phase defense commands</span>
+                            </div>
+                        </div>
+                        <div class="cmd-queues">
+                            <span class="cmd-q">alert.critical</span>
+                            <span class="cmd-q">intel.external</span>
+                            <span class="cmd-q">alert.manual_upload</span>
+                        </div>
+                    </div>
+                    <div style="padding:20px;">
+                        <div class="score-bar">
+                            <div class="score-chip sc-warn">
+                                <strong>Score ≥ 70 → <span data-zh>潛在威脅</span><span data-en>Potential
+                                        Threat</span></strong>
+                                <span data-zh>觸發 Phase 2 DECEIVE（誘捕欺敵）</span><span data-en>Triggers Phase 2 DECEIVE
+                                    (deception &amp; trapping)</span>
+                            </div>
+                            <div class="score-chip sc-crit">
+                                <strong>Score ≥ 85 → <span data-zh>緊急威脅</span><span data-en>Critical
+                                        Threat</span></strong>
+                                <span data-zh>同步觸發 Phase 3 MUTATE（移動目標防禦）</span><span data-en>Simultaneously triggers
+                                    Phase 3 MUTATE (moving target defense)</span>
+                            </div>
+                        </div>
+                        <div class="phases-grid">
+
+                            <!-- PH 1 -->
+                            <div class="phase-card pc1" onclick="showD('ph1')">
+                                <div class="ph-head"><span class="ph-num">PH.1</span><span
+                                        class="ph-name">PREDICT</span></div>
+                                <div class="ph-sub"><span data-zh>預測與風險評估</span><span data-en>Prediction & Risk
+                                        Scoring</span></div>
+                                <div class="ph-steps">
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph1)">1</div>
+                                        <div class="ph-step-t"><span data-zh><strong>PII 去識別化</strong> — pii_masker.py
+                                                正則遮蔽 Email/IP/手機，GDPR 合規。</span><span data-en><strong>PII
+                                                    De-identification</strong> — pii_masker.py uses regex to mask
+                                                Email/IP/phone. GDPR compliant.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph1)">2</div>
+                                        <div class="ph-step-t"><span data-zh><strong>知識擴充</strong> — cve_enrichment.py
+                                                比對漏洞庫；cmdb_mock.py 查資產重要性。</span><span data-en><strong>Knowledge
+                                                    Enrichment</strong> — cve_enrichment.py cross-references
+                                                vulnerability DB; cmdb_mock.py checks asset criticality.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph1)">3</div>
+                                        <div class="ph-step-t"><span data-zh><strong>橫向移動預測</strong> —
+                                                adversarial_engine.py + topology_graph.py 模擬駭客下一步。</span><span
+                                                data-en><strong>Lateral Movement Prediction</strong> —
+                                                adversarial_engine.py + topology_graph.py simulate the attacker's next
+                                                move.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph1)">4</div>
+                                        <div class="ph-step-t"><span data-zh><strong>多維度風險評分</strong> — LLM 給出 0–100
+                                                風險分數，決定觸發哪些 Phase。</span><span data-en><strong>Multi-dimensional Risk
+                                                    Score</strong> — LLM outputs a 0–100 risk score to determine which
+                                                Phases to trigger.</span></div>
+                                    </div>
+                                </div>
+                                <div class="ph-files"><span class="ph-file">pii_masker.py</span><span
+                                        class="ph-file">cve_enrichment.py</span><span
+                                        class="ph-file">cmdb_mock.py</span><span
+                                        class="ph-file">adversarial_engine.py</span><span
+                                        class="ph-file">topology_graph.py</span><span
+                                        class="ph-file">llm_client.py</span></div>
+                            </div>
+
+                            <!-- PH 2 -->
+                            <div class="phase-card pc2" onclick="showD('ph2')">
+                                <div class="ph-head"><span class="ph-num">PH.2</span><span
+                                        class="ph-name">DECEIVE</span></div>
+                                <div class="ph-sub"><span data-zh>動態誘捕與資料投毒</span><span data-en>Dynamic Deception & Data
+                                        Poisoning</span></div>
+                                <div class="ph-steps">
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph2)">1</div>
+                                        <div class="ph-step-t"><span data-zh><strong>戰術誘餌設計</strong> — decoy_manager.py
+                                                選擇最能吸引該駭客的模板（如假 MySQL）。</span><span data-en><strong>Tactical Decoy
+                                                    Design</strong> — decoy_manager.py selects the most enticing
+                                                template for the attacker (e.g. fake MySQL).</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph2)">2</div>
+                                        <div class="ph-step-t"><span data-zh><strong>次世代資料投毒</strong> — 產生
+                                                fake_secrets.json / poisoned_db.sql，讓駭客 AI（WormGPT）幻覺崩潰。</span><span
+                                                data-en><strong>Next-Gen Data Poisoning</strong> — Generates
+                                                fake_secrets.json / poisoned_db.sql to induce hallucinations in attacker
+                                                AIs (WormGPT).</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph2)">3</div>
+                                        <div class="ph-step-t"><span data-zh><strong>極速容器部署</strong> — Docker Python SDK
+                                                在幾秒內拉起誘餌容器。</span><span data-en><strong>Rapid Container
+                                                    Deployment</strong> — Docker Python SDK spins up decoy containers
+                                                within seconds.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph2)">4</div>
+                                        <div class="ph-step-t"><span data-zh><strong>陷阱遙測追蹤</strong> —
+                                                honeypot_fluent_bit.conf 回傳純淨駭客行為，精準勾勒指紋。</span><span
+                                                data-en><strong>Trap Telemetry</strong> — honeypot_fluent_bit.conf
+                                                returns clean attacker behavior to profile their fingerprint
+                                                precisely.</span></div>
+                                    </div>
+                                </div>
+                                <div class="ph-files"><span class="ph-file">decoy_manager.py</span><span
+                                        class="ph-file">decoy_templates.py</span><span
+                                        class="ph-file">fake_secrets.json</span><span
+                                        class="ph-file">poisoned_db.sql</span></div>
+                                <div class="ph-innov"><span class="innov-star">✦</span><span
+                                        data-zh>創新點：投毒假情資專門設計讓駭客使用的自動化攻擊 AI 產生幻覺或邏輯崩潰。</span><span data-en>Innovation:
+                                        Poisoned data is engineered to cause hallucinations and logic collapse in
+                                        automated attacker AIs.</span></div>
+                            </div>
+
+                            <!-- PH 3 -->
+                            <div class="phase-card pc3" onclick="showD('ph3')">
+                                <div class="ph-head"><span class="ph-num">PH.3</span><span class="ph-name">MUTATE</span>
+                                </div>
+                                <div class="ph-sub"><span data-zh>移動目標防禦 MTD</span><span data-en>Moving Target Defense
+                                        (MTD)</span></div>
+                                <div class="ph-steps">
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph3)">1</div>
+                                        <div class="ph-step-t"><span data-zh><strong>變異策略判定</strong> — mtd_controller.py
+                                                決定「輕微混淆」還是「徹底遷移」。</span><span data-en><strong>Mutation Strategy</strong>
+                                                — mtd_controller.py decides between "light obfuscation" or "full
+                                                migration".</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph3)">2</div>
+                                        <div class="ph-step-t"><span data-zh><strong>通訊層混淆</strong> —
+                                                obfuscation_engine.py 修改 mtd_nginx.conf，動態更換 URL / Header /
+                                                加密方式。</span><span data-en><strong>Comm Layer Obfuscation</strong> —
+                                                obfuscation_engine.py modifies mtd_nginx.conf, dynamically rotating
+                                                URLs, headers, and encryption.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph3)">3</div>
+                                        <div class="ph-step-t"><span data-zh><strong>數位雙生衝擊驗證</strong> — Cyber Digital
+                                                Twin 模擬流量，確認 Zero Downtime 才允許執行。</span><span data-en><strong>Digital
+                                                    Twin Impact Check</strong> — Cyber Digital Twin simulates traffic to
+                                                confirm Zero Downtime before executing.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph3)">4</div>
+                                        <div class="ph-step-t"><span data-zh><strong>藍綠部署環境重塑</strong> —
+                                                migration_engine.py 啟動乾淨容器，流量切換後銷毀舊環境。</span><span
+                                                data-en><strong>Blue-Green Redeploy</strong> — migration_engine.py
+                                                launches a clean container, swaps traffic, then destroys the old
+                                                environment.</span></div>
+                                    </div>
+                                </div>
+                                <div class="ph-files"><span class="ph-file">mtd_controller.py</span><span
+                                        class="ph-file">obfuscation_engine.py</span><span
+                                        class="ph-file">mtd_nginx.conf</span><span
+                                        class="ph-file">migration_engine.py</span></div>
+                                <div class="ph-innov"><span class="innov-star">✦</span><span data-zh>Cyber Digital Twin
+                                        確保每次 MTD 大規模變異前，先模擬驗證零業務中斷。</span><span data-en>Cyber Digital Twin guarantees
+                                        every large-scale MTD mutation is simulation-validated for zero business
+                                        disruption.</span></div>
+                            </div>
+
+                            <!-- PH 4 -->
+                            <div class="phase-card pc4" onclick="showD('ph4')">
+                                <div class="ph-head"><span class="ph-num">PH.4</span><span
+                                        class="ph-name">CONTAIN</span></div>
+                                <div class="ph-sub"><span data-zh>自動化阻斷與隔離</span><span data-en>Automated Containment &
+                                        Isolation</span></div>
+                                <div class="ph-steps">
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph4)">1</div>
+                                        <div class="ph-step-t"><span data-zh><strong>行動劇本產出</strong> — to_stix.py
+                                                輸出威脅情資；LLM 撰寫 soar_playbook.json 反擊指令。</span><span
+                                                data-en><strong>Playbook Generation</strong> — to_stix.py outputs threat
+                                                intel; LLM authors soar_playbook.json counter-attack commands.</span>
+                                        </div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph4)">2</div>
+                                        <div class="ph-step-t"><span data-zh><strong>硬體級 API 阻斷</strong> — mock_soar.py
+                                                + firewall_mock.py 對防火牆下 REJECT，秒級封鎖攻擊源 IP。</span><span
+                                                data-en><strong>Hardware-level API Block</strong> — mock_soar.py +
+                                                firewall_mock.py issue REJECT to the firewall, blocking the attacker's
+                                                IP within seconds.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph4)">3</div>
+                                        <div class="ph-step-t"><span data-zh><strong>IaC 自我修復</strong> — AI 分析
+                                                Terraform/Nginx 漏洞，自動寫 Patch → PR → CI/CD 重部署「免疫後」基建。</span><span
+                                                data-en><strong>IaC Self-Healing</strong> — AI analyzes Terraform/Nginx
+                                                vulnerabilities, auto-writes a Patch → PR → CI/CD redeploys patched
+                                                infrastructure.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph4)">4</div>
+                                        <div class="ph-step-t"><span data-zh><strong>不可竄改稽核</strong> — audit_logger.py
+                                                寫入 OpenSearch 稽核索引，時間戳記簽章，法規鑑識依據。</span><span data-en><strong>Immutable
+                                                    Audit Log</strong> — audit_logger.py writes to OpenSearch with
+                                                timestamped signatures for forensic and compliance evidence.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="ph-files"><span class="ph-file">to_stix.py</span><span
+                                        class="ph-file">soar_playbook.json</span><span
+                                        class="ph-file">mock_soar.py</span><span
+                                        class="ph-file">firewall_mock.py</span><span
+                                        class="ph-file">audit_logger.py</span></div>
+                                <div class="ph-innov"><span class="innov-star">✦</span><span data-zh>Self-Healing IaC：AI
+                                        自動寫 Patch、提交 PR、觸發 CI/CD，無需人工介入基建修復。</span><span data-en>Self-Healing IaC: AI
+                                        auto-writes the Patch, submits a PR, and triggers CI/CD — zero human
+                                        intervention required.</span></div>
+                            </div>
+
+                            <!-- PH 5 -->
+                            <div class="phase-card pc5" onclick="showD('ph5')">
+                                <div class="ph-head"><span class="ph-num">PH.5</span><span class="ph-name">ADAPT</span>
+                                </div>
+                                <div class="ph-sub"><span data-zh>大腦自我進化</span><span data-en>Brain Self-Evolution</span>
+                                </div>
+                                <div class="ph-steps">
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph5)">1</div>
+                                        <div class="ph-step-t"><span data-zh><strong>情報品質控管</strong> — validate_stix.py
+                                                確保 STIX 2.1 格式符合國際標準，可與外部資安聯盟共享。</span><span data-en><strong>Intel
+                                                    Quality Control</strong> — validate_stix.py ensures STIX 2.1
+                                                compliance for sharing with external security alliances.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph5)">2</div>
+                                        <div class="ph-step-t"><span data-zh><strong>長效知識寫入</strong> —
+                                                setup_knowledge_base.py 將攻擊者 TTPs 存入 OpenSearch KNN
+                                                向量庫，語義搜尋瞬間反應。</span><span data-en><strong>Long-term Knowledge
+                                                    Write</strong> — setup_knowledge_base.py stores attacker TTPs in
+                                                OpenSearch KNN vector DB for instant semantic recall.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph5)">3</div>
+                                        <div class="ph-step-t"><span data-zh><strong>強化學習反饋</strong> — feedback_loop.py
+                                                根據防禦成效自動調整 Commander AI Prompt 權重，完成 AI Brain Growth。</span><span
+                                                data-en><strong>Reinforcement Feedback</strong> — feedback_loop.py
+                                                auto-adjusts Commander AI Prompt weights based on defense outcomes. AI
+                                                Brain Growth achieved.</span></div>
+                                    </div>
+                                    <div class="ph-step">
+                                        <div class="ph-step-n" style="background:var(--ph5)">4</div>
+                                        <div class="ph-step-t"><span data-zh><strong>執行長戰報</strong> — to_pdf.py 提取 Phase
+                                                1–4 數據，產出精美 PDF Executive Report，推送至 Dashboard。</span><span
+                                                data-en><strong>Executive Report</strong> — to_pdf.py extracts Phase 1–4
+                                                data, generates a polished PDF Executive Report, and pushes it to the
+                                                Dashboard.</span></div>
+                                    </div>
+                                </div>
+                                <div class="ph-files"><span class="ph-file">validate_stix.py</span><span
+                                        class="ph-file">setup_knowledge_base.py</span><span
+                                        class="ph-file">feedback_loop.py</span><span class="ph-file">to_pdf.py</span>
+                                </div>
+                            </div>
+
+                        </div><!-- /phases-grid -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLOW 3→4 -->
+        <div class="flow-arrow">
+            <div class="fa-track">
+                <div class="fa-dot" style="background:var(--l3);animation-delay:.6s"></div>
+                <div class="fa-dot" style="background:var(--l3);animation-delay:1.5s;opacity:.4"></div>
+            </div>
+            <div class="fa-line fa-left"></div>
+            <div class="fa-label">
+                <strong><span data-zh>Phase 5 完成 → 成果輸出至 Dashboard & Reports</span><span data-en>Phase 5 Complete →
+                        Output to Dashboard & Reports</span></strong>
+                <span><span data-zh>PDF 推送 · OpenSearch 查詢 · 即時戰情更新</span><span data-en>PDF push · OpenSearch query ·
+                        live situation update</span></span>
+            </div>
+            <div class="fa-line fa-right"></div>
+        </div>
+
+        <!-- ══ LAYER 4 ══ -->
+        <div class="layer l4-accent" id="ly4" style="transition-delay:.45s">
+            <div class="layer-wrap l4-w">
+                <div class="layer-hd" onclick="tog('ly4')">
+                    <span class="lbadge">LAYER 04</span>
+                    <span class="lname"><span data-zh>成果展示與輸出層</span><span data-en>Output & Reporting
+                            Layer</span></span>
+                    <span class="lsub">DASHBOARD · REPORTING · app_ui.py · to_pdf.py</span>
+                    <span class="ltoggle">▾</span>
+                </div>
+                <div class="layer-body">
+                    <div class="output-grid">
+
+                        <div class="out-card oc-dash" onclick="showD('dash')">
+                            <div class="oc-head">
+                                <span class="oc-icon">📡</span>
+                                <div>
+                                    <div class="oc-title"><span data-zh>實時戰情室 Dashboard</span><span data-en>Live
+                                            Operations Dashboard</span></div>
+                                    <div class="oc-file">app_ui.py · setup_dashboards.py · <span data-zh>OpenSearch
+                                            即時查詢</span><span data-en>OpenSearch live query</span></div>
+                                </div>
+                            </div>
+                            <div class="oc-features">
+                                <div class="oc-feat">
+                                    <strong><span data-zh>威脅地圖 (Threat Map)</span><span data-en>Threat
+                                            Map</span></strong>
+                                    <span><span data-zh>即時顯示駭客攻擊來源 IP 與地理位置。</span><span data-en>Real-time display of
+                                            attacker source IPs and geographic origins.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>預測地圖 (Predictive Map)</span><span data-en>Predictive
+                                            Map</span></strong>
+                                    <span><span data-zh>顯示 Phase 1 AI 預測的攻擊橫向移動路徑。</span><span data-en>Visualizes the
+                                            lateral movement paths predicted by the Phase 1 AI engine.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>MTD 狀態面板</span><span data-en>MTD Status Panel</span></strong>
+                                    <span><span data-zh>顯示哪些服務正在變異、哪些蜜罐被觸發。</span><span data-en>Shows which services are
+                                            currently mutating and which honeypots have been triggered.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>即時告警串流</span><span data-en>Live Alert Stream</span></strong>
+                                    <span><span data-zh>從 OpenSearch Hot Tier 提取最新分析結果。</span><span data-en>Pulls the
+                                            latest analysis results from OpenSearch Hot Tier in real time.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>人工報案入口</span><span data-en>Manual Report
+                                            Portal</span></strong>
+                                    <span><span data-zh>IT 人員上傳 Log / STIX 的操作界面。</span><span data-en>The interface for
+                                            IT staff to upload Logs or STIX threat reports.</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="out-card oc-pdf" onclick="showD('pdf')">
+                            <div class="oc-head">
+                                <span class="oc-icon">📋</span>
+                                <div>
+                                    <div class="oc-title"><span data-zh>自動結案報告 PDF</span><span data-en>Auto-Generated
+                                            PDF Report</span></div>
+                                    <div class="oc-file">to_pdf.py · to_stix.py · <span data-zh>Phase 5 ADAPT
+                                            觸發</span><span data-en>Triggered by Phase 5 ADAPT</span></div>
+                                </div>
+                            </div>
+                            <div class="oc-features">
+                                <div class="oc-feat">
+                                    <strong><span data-zh>觸發時機</span><span data-en>Trigger Condition</span></strong>
+                                    <span><span data-zh>Phase 5 ADAPT 完成後，偵測到完整攻擊事件 (Incident) 結束。</span><span
+                                            data-en>Fires after Phase 5 ADAPT completes and a full attack Incident
+                                            lifecycle is detected as closed.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>自動串聯</span><span data-en>Auto-Correlation</span></strong>
+                                    <span><span data-zh>將 Phase 1–4 完整過程：發現 → 誘捕 → 變異 → 反擊，串聯成完整時序報告。</span><span
+                                            data-en>Chains Phase 1–4 into a complete timeline: Detect → Deceive → Mutate
+                                            → Contain.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>STIX 2.1 標準輸出</span><span data-en>STIX 2.1 Standard
+                                            Output</span></strong>
+                                    <span><span data-zh>符合國際標準，可與外部資安聯盟交換情資。</span><span data-en>Meets international
+                                            standards for sharing intelligence with external security
+                                            alliances.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong>Executive Summary</strong>
+                                    <span><span data-zh>精美 PDF 自動推送至 Dashboard 供管理員下載。</span><span data-en>Polished PDF
+                                            automatically pushed to the Dashboard for executive download.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>數位鑑識附件</span><span data-en>Digital Forensics
+                                            Annex</span></strong>
+                                    <span><span data-zh>附帶 audit_logger 的不可竄改稽核記錄。</span><span data-en>Includes the
+                                            immutable audit trail from audit_logger for legal and forensic
+                                            use.</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /main -->
+
+    <!-- DETAIL PANEL -->
+    <div class="detail-panel" id="dpanel">
+        <span class="dp-close" onclick="closeD()">✕</span>
+        <div class="dp-icon" id="dpIcon">🧠</div>
+        <div class="dp-name" id="dpName">-</div>
+        <div class="dp-body" id="dpBody">-</div>
+        <div class="dp-steps" id="dpSteps"></div>
+        <span class="dp-tag" id="dpTag">-</span>
+    </div>
+
+    <script>
+        let currentLang = 'zh';
+
+        function setLang(lang) {
+            currentLang = lang;
+            document.body.className = 'lang-' + lang;
+            document.getElementById('btnZH').classList.toggle('active', lang === 'zh');
+            document.getElementById('btnEN').classList.toggle('active', lang === 'en');
+            // update open detail panel if visible
+            if (document.getElementById('dpanel').classList.contains('show')) {
+                showD(lastKey);
+            }
+        }
+
+        function tog(id) { document.getElementById(id).classList.toggle('collapsed'); }
+
+        document.querySelectorAll('.layer').forEach((el, i) => setTimeout(() => el.classList.add('in'), 80 + i * 180));
+
+        const DET = {
+            fluent: {
+                icon: '🛡️',
+                name: { zh: 'Fluent Bit — 日誌收發員', en: 'Fluent Bit — Log Collector' },
+                body: {
+                    zh: '第一線哨兵。以極低資源消耗從伺服器、K8s、防火牆即時收集原始 Log。核心設計原則：不做 AI 分析，只貼 Routing Key 標籤後送入 RabbitMQ。兩份 conf 檔分別處理正常內網流量與蜜罐誘捕流量。',
+                    en: 'The first-line sentinel. Collects raw logs from servers, K8s, and firewalls with minimal resource overhead. Core design principle: no AI analysis — only tagging with Routing Keys before publishing to RabbitMQ. Two conf files handle internal traffic and honeypot traffic separately.'
+                },
+                steps: {
+                    zh: ['Step 1: 從各節點收集原始 Log（不做 AI 分析）', 'Step 2: 依 Log 來源自動貼 Routing Key 標籤', 'Step 3: 統一送入 RabbitMQ 內部物流總局'],
+                    en: ['Step 1: Collect raw logs from all nodes (no AI analysis)', 'Step 2: Auto-tag logs by source with Routing Keys', 'Step 3: Publish everything to the internal RabbitMQ hub']
+                },
+                tag: 'LOG COLLECTOR · LAYER 1', bg: 'rgba(34,211,238,.15)', tc: '#22d3ee'
+            },
+            crawler: {
+                icon: '🕵️‍♂️',
+                name: { zh: 'Intelligence Crawler — 外部情報特務', en: 'Intelligence Crawler — External Threat Scout' },
+                body: {
+                    zh: '獨立排程的 Python 腳本，不等被攻擊才動作。每小時主動巡邏 NVD、AlienVault OTX、ISAC 平台，抓取最新 0-day CVE 與全球活躍惡意 IP/Domain。事前情報使 Commander AI 能在攻擊發生前就封鎖通緝犯。',
+                    en: 'A standalone scheduled Python script that acts proactively. Hourly patrols of NVD, AlienVault OTX, and ISAC platforms to harvest the latest 0-day CVEs and globally active malicious IPs/Domains. Proactive intel allows Commander AI to block attackers before they strike.'
+                },
+                steps: {
+                    zh: ['Step 0: 排程定時出任務（每小時）', 'Step 1: 爬取 NVD / AlienVault / 暗網 IOC', 'Step 2: 打包為標準 JSON，貼 intel.external 標籤', 'Step 3: 送入 RabbitMQ → Commander AI 接收', 'Commander AI 動作: 存入 OpenSearch + CVE 比對 + 事前封鎖惡意 IP'],
+                    en: ['Step 0: Scheduled task fires (hourly)', 'Step 1: Crawl NVD / AlienVault / dark web IOCs', 'Step 2: Package as standard JSON, tag intel.external', 'Step 3: Publish to RabbitMQ → Commander AI receives', 'Commander AI: store in OpenSearch + CVE match + proactively block malicious IPs']
+                },
+                tag: 'EXTERNAL INTEL · LAYER 1', bg: 'rgba(163,230,53,.15)', tc: '#a3e635'
+            },
+            manual: {
+                icon: '👤',
+                name: { zh: 'Manual Input — 人工報案介面', en: 'Manual Input — Human Upload Interface' },
+                body: {
+                    zh: 'IT 人員或 SOC 分析師的手動輸入通道。設計精髓：後端不直接呼叫 LLM，而是貼標籤後送入 RabbitMQ 排隊。這樣即使 100 人同時按上傳，系統也不會因為瞬間大量 LLM 請求而崩潰。',
+                    en: 'The manual input channel for IT staff and SOC analysts. Key design: the backend does NOT call the LLM directly — it tags and queues to RabbitMQ. This means 100 simultaneous uploads will never crash the system with sudden LLM request spikes.'
+                },
+                steps: {
+                    zh: ['Step 1: IT 人員透過 app_ui.py 上傳 Log 或 STIX 報告', 'Step 2: 後端貼 alert.manual_upload 標籤送入 RabbitMQ', 'Step 3: Commander AI 以最高優先級處理人工報案'],
+                    en: ['Step 1: IT staff uploads Log or STIX report via app_ui.py', 'Step 2: Backend tags alert.manual_upload and publishes to RabbitMQ', 'Step 3: Commander AI processes manual cases at highest priority']
+                },
+                tag: 'MANUAL INPUT · LAYER 1', bg: 'rgba(245,158,11,.15)', tc: '#f59e0b'
+            },
+            rabbitmq: {
+                icon: '🚚',
+                name: { zh: 'RabbitMQ — 中樞物流總局', en: 'RabbitMQ — Central Message Hub' },
+                body: {
+                    zh: '整個系統的神經中樞。AMQP 協議確保高吞吐量與零丟失。優先級佇列（Priority Queue）讓 alert.critical 永遠排在最前面。Dead Letter Queue 確保任何訊息不會因為處理失敗而消失。',
+                    en: 'The nervous system of the entire platform. AMQP protocol guarantees high throughput and zero message loss. Priority Queues ensure alert.critical always jumps to the front. Dead Letter Queues catch any failed messages so nothing is ever lost.'
+                },
+                steps: {
+                    zh: ['接收所有 Layer 1 來源的 Routing Key 訊息', 'AI Worker 訂閱對應頻道做邊緣雜訊過濾', 'Drop 正常流量；異常流量升級為 alert.critical', 'Commander AI 只監聽高危頻道，避免資源浪費'],
+                    en: ['Receives all Routing Key messages from Layer 1 sources', 'AI Workers subscribe to their channels for edge noise filtering', 'Normal traffic → Drop; Anomalous traffic → escalate as alert.critical', 'Commander AI only listens to high-risk channels, conserving LLM resources']
+                },
+                tag: 'MESSAGE BROKER · LAYER 2', bg: 'rgba(163,230,53,.15)', tc: '#a3e635'
+            },
+            ph1: {
+                icon: '🔭',
+                name: { zh: 'Phase 1: PREDICT — 預測與風險評估', en: 'Phase 1: PREDICT — Prediction & Risk Assessment' },
+                body: {
+                    zh: '將原始數據轉化為可研判情資，量化威脅程度。這是整個 5 階段防禦的起點，也是決定後續觸發哪些 Phase 的關鍵評分引擎。',
+                    en: 'Converts raw data into actionable intelligence and quantifies threat level. This is the starting point of the entire 5-phase defense and the critical scoring engine that determines which subsequent Phases are triggered.'
+                },
+                steps: {
+                    zh: ['S1: pii_masker.py 正則遮蔽個資（GDPR 合規）', 'S2: cve_enrichment.py 比對漏洞庫 + cmdb_mock.py 查資產重要性', 'S3: adversarial_engine.py + topology_graph.py 預測橫向移動路徑', 'S4: LLM 給出 0–100 風險評分 → ≥70 觸發 PH2 · ≥85 同步觸發 PH3'],
+                    en: ['S1: pii_masker.py masks PII via regex (GDPR compliant)', 'S2: cve_enrichment.py matches vuln DB + cmdb_mock.py checks asset criticality', 'S3: adversarial_engine.py + topology_graph.py predict lateral movement paths', 'S4: LLM outputs 0–100 risk score → ≥70 triggers PH2 · ≥85 also triggers PH3']
+                },
+                tag: 'PHASE 1 · PREDICT', bg: 'rgba(6,182,212,.15)', tc: '#06b6d4'
+            },
+            ph2: {
+                icon: '🎭',
+                name: { zh: 'Phase 2: DECEIVE — 動態誘捕與資料投毒', en: 'Phase 2: DECEIVE — Dynamic Deception & Data Poisoning' },
+                body: {
+                    zh: '在駭客進攻路徑上佈置數位陷阱。核心創新：不只是普通蜜罐，而是生成專門設計用來讓駭客 AI（WormGPT）產生幻覺的毒化數據，從認知層面瓦解自動化攻擊工具的決策邏輯。',
+                    en: 'Plants digital traps along the attacker\'s path. Core innovation: not just regular honeypots — this generates poisoned data specifically engineered to cause hallucinations in attacker AIs (WormGPT), dismantling automated attack tools at the cognitive level.'
+                },
+                steps: {
+                    zh: ['S1: decoy_manager.py 選擇最能吸引駭客的誘餌模板', 'S2: 生成 fake_secrets.json / poisoned_db.sql（投毒駭客 AI）', 'S3: Docker Python SDK 在數秒內拉起誘餌容器', 'S4: honeypot_fluent_bit.conf 回傳純淨駭客指紋行為'],
+                    en: ['S1: decoy_manager.py selects the most enticing decoy template', 'S2: Generates fake_secrets.json / poisoned_db.sql (poisons attacker AI)', 'S3: Docker Python SDK spins up decoy containers within seconds', 'S4: honeypot_fluent_bit.conf returns clean attacker fingerprint behavior']
+                },
+                tag: 'PHASE 2 · DECEIVE ✦ NEXT-GEN', bg: 'rgba(139,92,246,.15)', tc: '#8b5cf6'
+            },
+            ph3: {
+                icon: '🌀',
+                name: { zh: 'Phase 3: MUTATE — 移動目標防禦 MTD', en: 'Phase 3: MUTATE — Moving Target Defense (MTD)' },
+                body: {
+                    zh: '讓真實攻擊面不斷變動，讓駭客看得到、打不到。核心創新：每次大規模變異前，先在 Cyber Digital Twin 平行宇宙中模擬，確認不影響正常業務後才執行，徹底消除誤殺風險。',
+                    en: 'Keeps the real attack surface in constant motion — the attacker can see it but can\'t hit it. Core innovation: every large-scale mutation is first simulated in the Cyber Digital Twin parallel universe, confirmed to have zero business impact, then executed.'
+                },
+                steps: {
+                    zh: ['S1: mtd_controller.py 判定變異策略（輕微混淆 or 徹底遷移）', 'S2: obfuscation_engine.py 動態更換 URL / Header / 加密方式', 'S3: Cyber Digital Twin 模擬 → Zero Downtime 驗證通過才允許', 'S4: migration_engine.py 藍綠部署 → 舊環境銷毀 → 駭客失去目標'],
+                    en: ['S1: mtd_controller.py decides mutation strategy (light obfuscation vs full migration)', 'S2: obfuscation_engine.py dynamically rotates URLs, headers, and encryption', 'S3: Cyber Digital Twin simulation → Zero Downtime confirmed → execution authorized', 'S4: migration_engine.py blue-green deploy → old environment destroyed → attacker loses target']
+                },
+                tag: 'PHASE 3 · MUTATE ✦ NEXT-GEN', bg: 'rgba(245,158,11,.15)', tc: '#f59e0b'
+            },
+            ph4: {
+                icon: '🚨',
+                name: { zh: 'Phase 4: CONTAIN — 自動化阻斷與隔離', en: 'Phase 4: CONTAIN — Automated Containment & Isolation' },
+                body: {
+                    zh: '正式介入，實體切斷威脅並修復根本原因。三個平行動作：SOAR 封鎖 IP、IaC 自我修復漏洞代碼、Audit Logger 記錄完整證據鏈。',
+                    en: 'Full intervention — physically cuts off the threat and fixes the root cause. Three parallel actions: SOAR blocks the IP, IaC self-heals the vulnerable code, and Audit Logger records the complete evidence chain.'
+                },
+                steps: {
+                    zh: ['S1: to_stix.py 輸出標準威脅情資 + LLM 撰寫 soar_playbook.json', 'S2: mock_soar.py → firewall_mock.py → REJECT 封鎖攻擊源 IP', 'S3: AI 分析漏洞根因 → 自動寫 Patch → GitHub PR → CI/CD 重部署', 'S4: audit_logger.py 寫入不可竄改的時間戳記稽核記錄'],
+                    en: ['S1: to_stix.py outputs standard threat intel + LLM writes soar_playbook.json', 'S2: mock_soar.py → firewall_mock.py → REJECT blocks attacker IP', 'S3: AI analyzes vuln root cause → auto-writes Patch → GitHub PR → CI/CD redeploys', 'S4: audit_logger.py writes immutable timestamped audit record']
+                },
+                tag: 'PHASE 4 · CONTAIN', bg: 'rgba(239,68,68,.15)', tc: '#ef4444'
+            },
+            ph5: {
+                icon: '🌱',
+                name: { zh: 'Phase 5: ADAPT — 大腦自我進化', en: 'Phase 5: ADAPT — Brain Self-Evolution' },
+                body: {
+                    zh: '將一次性防禦轉化為永久免疫力。每一次成功或失敗的防禦都會成為 Commander AI 的養分，通過 RLHF 讓系統在每次事件後變得更聰明。',
+                    en: 'Converts a one-time defense into permanent immunity. Every successful or failed defense feeds Commander AI, using RLHF to make the system measurably smarter after each incident.'
+                },
+                steps: {
+                    zh: ['S1: validate_stix.py 品質控管（STIX 2.1 國際標準）', 'S2: setup_knowledge_base.py 將攻擊 TTPs 存入 OpenSearch KNN 向量庫', 'S3: feedback_loop.py RLHF 調整 Commander AI Prompt 權重', 'S4: to_pdf.py 產出 Executive Report → 推送至 Dashboard'],
+                    en: ['S1: validate_stix.py quality control (STIX 2.1 international standard)', 'S2: setup_knowledge_base.py stores attack TTPs in OpenSearch KNN vector DB', 'S3: feedback_loop.py RLHF adjusts Commander AI Prompt weights', 'S4: to_pdf.py generates Executive Report → pushed to Dashboard']
+                },
+                tag: 'PHASE 5 · ADAPT', bg: 'rgba(16,185,129,.15)', tc: '#10b981'
+            },
+            dash: {
+                icon: '📡',
+                name: { zh: '實時戰情室 — Dashboard', en: 'Live Operations Dashboard' },
+                body: {
+                    zh: '高階主管與 SOC 分析師的統一作戰界面。所有數據來自 OpenSearch 即時查詢。集成威脅地圖、AI 預測路徑視覺化、MTD 狀態監控與人工報案入口於一體。',
+                    en: 'The unified command interface for executives and SOC analysts. All data is sourced from OpenSearch live queries. Integrates Threat Map, AI-predicted lateral movement visualization, MTD status monitoring, and the manual report portal.'
+                },
+                steps: {
+                    zh: ['從 OpenSearch Hot Tier 即時拉取最新告警', '顯示 Phase 1 預測的攻擊橫向移動路徑地圖', '顯示 Phase 2/3 的蜜罐觸發狀態與 MTD 變異進度', '接收 Phase 5 自動推送的 PDF 執行摘要報告'],
+                    en: ['Pulls latest alerts from OpenSearch Hot Tier in real time', 'Displays Phase 1 predicted lateral movement path map', 'Shows Phase 2/3 honeypot trigger status and MTD mutation progress', 'Receives Phase 5 auto-pushed PDF executive summary report']
+                },
+                tag: 'OUTPUT · LAYER 4', bg: 'rgba(129,140,248,.15)', tc: '#818cf8'
+            },
+            pdf: {
+                icon: '📋',
+                name: { zh: '自動結案報告 PDF', en: 'Auto-Generated Incident PDF Report' },
+                body: {
+                    zh: 'Phase 5 ADAPT 完成後自動觸發。自動將 Phase 1–4 的完整防禦過程串聯成一份精美的執行摘要報告，符合 STIX 2.1 國際標準，可提交法規機關或與外部資安聯盟共享。',
+                    en: 'Automatically triggered after Phase 5 ADAPT completes. Chains the full Phase 1–4 defense lifecycle into a polished Executive Summary Report, compliant with STIX 2.1 international standards for regulatory submission or alliance sharing.'
+                },
+                steps: {
+                    zh: ['Phase 5 偵測到完整攻擊事件 (Incident) 結束', 'to_stix.py 彙整標準威脅情資格式', 'to_pdf.py 提取 Phase 1–4 關鍵數據與圖表', 'PDF 自動推送至 Dashboard 供管理員下載'],
+                    en: ['Phase 5 detects a complete attack Incident lifecycle has closed', 'to_stix.py consolidates standard threat intel format', 'to_pdf.py extracts Phase 1–4 key data and charts', 'PDF auto-pushed to Dashboard for executive download']
+                },
+                tag: 'OUTPUT · LAYER 4', bg: 'rgba(129,140,248,.15)', tc: '#818cf8'
+            },
+        };
+
+        let lastKey = '';
+        function showD(k) {
+            const d = DET[k]; if (!d) return;
+            lastKey = k;
+            const L = currentLang;
+            document.getElementById('dpIcon').textContent = d.icon;
+            document.getElementById('dpName').textContent = d.name[L];
+            document.getElementById('dpBody').textContent = d.body[L];
+            document.getElementById('dpSteps').innerHTML = d.steps[L].map((s, i) => `
+    <div class="dp-step">
+      <div class="dp-step-n" style="background:${d.tc}">${i + 1}</div>
+      <span>${s}</span>
+    </div>`).join('');
+            const t = document.getElementById('dpTag');
+            t.textContent = d.tag; t.style.background = d.bg; t.style.color = d.tc;
+            document.getElementById('dpanel').classList.add('show');
+        }
+        function closeD() { document.getElementById('dpanel').classList.remove('show'); }
+        document.addEventListener('click', e => {
+            const p = document.getElementById('dpanel');
+            if (p.classList.contains('show') && !p.contains(e.target) && !e.target.closest('[onclick]')) closeD();
+        });
+    </script>
+</body>
+
+</html>
