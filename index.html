@@ -97,6 +97,14 @@
             background: #f59e0b;
         }
 
+        /* Hardware acceleration hints */
+        .pip,
+        .sweep,
+        .mq-arrow,
+        .fa-track {
+            will-change: transform, opacity;
+        }
+
         .scanline {
             position: fixed;
             inset: 0;
@@ -135,8 +143,8 @@
             backdrop-filter: blur(8px);
             flex-shrink: 0;
             position: absolute;
-            top: 40px;
-            right: 48px;
+            top: 24px;
+            right: 24px;
         }
 
         .lang-btn {
@@ -171,13 +179,13 @@
         header {
             position: relative;
             z-index: 10;
-            padding: 40px 48px 32px;
+            padding: 40px 24px 32px;
             border-bottom: 1px solid var(--border);
             display: flex;
-            align-items: flex-end;
+            align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 20px;
+            gap: 24px;
         }
 
         .brand-eyebrow {
@@ -308,7 +316,7 @@
         .main {
             position: relative;
             z-index: 5;
-            padding: 40px 48px 80px;
+            padding: 40px 24px 80px;
             display: flex;
             flex-direction: column;
             gap: 0;
@@ -629,7 +637,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 10px 48px;
+            padding: 10px 24px;
             z-index: 6;
         }
 
@@ -1454,26 +1462,149 @@
             font-weight: 600;
         }
 
-        @media(max-width:700px) {
+        @media(max-width:768px) {
             header {
-                padding: 24px 20px 20px;
+                padding: 60px 20px 24px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
+            }
+
+            .lang-toggle {
+                top: 16px;
+                right: 20px;
+            }
+
+            .header-right {
+                align-items: flex-start;
+                width: 100%;
+            }
+
+            .status-chips {
+                justify-content: flex-start;
+                width: 100%;
             }
 
             .main {
                 padding: 20px 16px 60px;
             }
 
+            .input-grid {
+                grid-template-columns: 1fr;
+            }
+
             .layer-body {
                 padding: 16px;
+            }
+
+            .mq-visual {
+                flex-direction: column;
+            }
+
+            .mq-arrow {
+                transform: none;
+                padding: 10px 0;
+                font-size: 28px;
+                animation: mqa-v 1.5s ease-in-out infinite;
+                /* Apply vertical animation */
+            }
+
+            .mq-arrow::before {
+                content: '↓';
+                display: block;
+                text-align: center;
+            }
+
+            /* Hide the original horizontal arrow text */
+            .mq-arrow {
+                color: transparent !important;
+                text-shadow: none !important;
+            }
+
+            .mq-arrow::before {
+                color: var(--l2) !important;
+                text-shadow: 0 0 12px var(--l2) !important;
+            }
+
+            @keyframes mqa-v {
+
+                0%,
+                100% {
+                    opacity: .4;
+                    transform: translateY(0);
+                }
+
+                50% {
+                    opacity: 1;
+                    transform: translateY(4px);
+                }
+            }
+
+            .mob-v-arrow {
+                display: inline-block;
+                color: transparent;
+                position: relative;
+            }
+
+            .mob-v-arrow::before {
+                content: '↓';
+                position: absolute;
+                inset: 0;
+                color: var(--l1);
+                text-align: center;
+                font-weight: 900;
+            }
+
+            .fa-label {
+                backdrop-filter: none !important;
+                background: rgba(0, 0, 0, 0.6) !important;
+            }
+
+            .phases-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .output-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .flow-arrow {
+                padding: 20px 10px;
+            }
+
+            .fa-line {
+                display: none;
             }
 
             .detail-panel {
                 width: calc(100vw - 32px);
                 right: 16px;
+                bottom: 16px;
+                backdrop-filter: none !important;
+                background: rgba(6, 8, 16, .98) !important;
             }
 
-            .cmd-strip {
-                padding: 12px 16px;
+            /* Performance: Disable heavy background effects on mobile */
+            .bg-g,
+            .scanline,
+            .sweep {
+                display: none !important;
+            }
+
+            .bg-grid {
+                opacity: 0.4;
+            }
+
+            .layer-wrap,
+            .lang-toggle,
+            .gh-banner {
+                backdrop-filter: none !important;
+                background: rgba(255, 255, 255, .05) !important;
+            }
+
+            body.lang-zh .layer-wrap,
+            body.lang-en .layer-wrap {
+                background: rgba(15, 23, 42, .95) !important;
             }
 
             .gh-banner {
@@ -1483,15 +1614,11 @@
 
             .gh-right {
                 width: 100%;
+                justify-content: space-between;
             }
 
-            .header-right {
-                align-items: flex-start;
-            }
-
-            .lang-toggle {
-                top: 24px;
-                right: 20px;
+            .brand-title {
+                font-size: 28px;
             }
         }
     </style>
@@ -1716,8 +1843,8 @@
             </div>
             <div class="fa-line fa-left"></div>
             <div class="fa-label">
-                <strong><span data-zh>所有原始資料 → RabbitMQ 物流總局</span><span data-en>All Raw Data → RabbitMQ Message
-                        Hub</span></strong>
+                <strong><span data-zh>所有原始資料 <span class="mob-v-arrow">→</span> RabbitMQ 物流總局</span><span data-en>All
+                        Raw Data <span class="mob-v-arrow">→</span> RabbitMQ Message Hub</span></strong>
                 <span><span data-zh>Routing Key 分流 · 統一送入內部佇列</span><span data-en>Routed by key · unified internal
                         queue</span></span>
             </div>
@@ -2124,8 +2251,9 @@
             </div>
             <div class="fa-line fa-left"></div>
             <div class="fa-label">
-                <strong><span data-zh>Phase 5 完成 → 成果輸出至 Dashboard & Reports</span><span data-en>Phase 5 Complete →
-                        Output to Dashboard & Reports</span></strong>
+                <strong><span data-zh>Phase 5 完成 <span class="mob-v-arrow">→</span> 成果輸出至 Dashboard &
+                        Reports</span><span data-en>Phase 5 Complete <span class="mob-v-arrow">→</span> Output to
+                        Dashboard & Reports</span></strong>
                 <span><span data-zh>PDF 推送 · OpenSearch 查詢 · 即時戰情更新</span><span data-en>PDF push · OpenSearch query ·
                         live situation update</span></span>
             </div>
