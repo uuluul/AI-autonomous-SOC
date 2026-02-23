@@ -19,6 +19,18 @@ HONEYPOT_QUEUE = 'honeypot_events'            # Phase 2: Deception telemetry
 RABBITMQ_USER = os.getenv('RABBITMQ_DEFAULT_USER', 'user')
 RABBITMQ_PASS = os.getenv('RABBITMQ_DEFAULT_PASS', 'password')
 
+# Layer 2: AI Worker Edge Filtering queues
+AI_WORKER_NETWORK_QUEUE = 'ai_worker_network'
+AI_WORKER_ENDPOINT_QUEUE = 'ai_worker_endpoint'
+AI_WORKER_IDENTITY_QUEUE = 'ai_worker_identity'
+ALERT_CRITICAL_QUEUE = 'alert_critical'
+
+# Phase 4 & 5 queues
+CONTAIN_QUEUE = 'contain_tasks'
+ADAPT_QUEUE = 'adapt_tasks'
+INTEL_EXTERNAL_QUEUE = 'intel_external'
+DLQ_QUEUE = 'dlq_main'
+
 # OpenSearch Config
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "opensearch-node")
 OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
@@ -33,6 +45,56 @@ def get_opensearch_client():
         verify_certs=False,
         connection_class=RequestsHttpConnection
     )
+
+def relay_to_ai_worker(raw_data, domain_queue):
+    """
+    Layer 2 — Relay domain-specific logs to AI Worker edge filtering queues.
+    Supports: ai_worker_network, ai_worker_endpoint, ai_worker_identity
+    """
+    try:
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST, credentials=credentials,
+                connection_attempts=3, retry_delay=2,
+            )
+        )
+        channel = connection.channel()
+        channel.queue_declare(queue=domain_queue, durable=True,
+                              arguments={"x-dead-letter-exchange": "",
+                                         "x-dead-letter-routing-key": DLQ_QUEUE})
+
+        payloads = json.loads(raw_data)
+
+        if isinstance(payloads, list):
+            for item in payloads:
+                if isinstance(item, list) and len(item) >= 2:
+                    record = item[1]
+                elif isinstance(item, dict):
+                    record = item
+                else:
+                    continue
+                channel.basic_publish(
+                    exchange='',
+                    routing_key=domain_queue,
+                    body=json.dumps(record),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+        elif isinstance(payloads, dict):
+            channel.basic_publish(
+                exchange='',
+                routing_key=domain_queue,
+                body=json.dumps(payloads),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+
+        connection.close()
+        print(f"  [SOAR] Logs relayed to AI Worker queue ({domain_queue})", flush=True)
+    except Exception as e:
+        import traceback
+        print(f"  [SOAR] AI Worker relay failed ({domain_queue}): {repr(e)}", flush=True)
+        traceback.print_exc()
+
 
 def relay_honeypot_event(raw_data):
     """
@@ -134,12 +196,34 @@ class SimpleHandler(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length)
         
         try:
-            # 1. Ingestion Endpoint
+            # 1. Ingestion Endpoint (legacy catch-all)
             if self.path == '/ingest':
                 send_to_rabbitmq(post_data)
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Ingested")
+                return
+
+            # 1b. Layer 2: AI Worker domain-specific ingestion
+            if self.path == '/ingest/network':
+                relay_to_ai_worker(post_data, AI_WORKER_NETWORK_QUEUE)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"Relayed to Network AI Worker")
+                return
+
+            if self.path == '/ingest/endpoint':
+                relay_to_ai_worker(post_data, AI_WORKER_ENDPOINT_QUEUE)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"Relayed to Endpoint AI Worker")
+                return
+
+            if self.path == '/ingest/identity':
+                relay_to_ai_worker(post_data, AI_WORKER_IDENTITY_QUEUE)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"Relayed to Identity AI Worker")
                 return
 
             # 2. Honeypot Telemetry
@@ -305,10 +389,55 @@ def init_indices():
     except Exception as e:
         print(f"  [SOAR] Failed to initialize indices: {e}", flush=True)
 
+def init_queues():
+    """Ensure all RabbitMQ queues exist with correct configurations."""
+    try:
+        print("  [SOAR] Initializing RabbitMQ queues...", flush=True)
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST, credentials=credentials,
+                connection_attempts=5, retry_delay=3,
+            )
+        )
+        channel = connection.channel()
+
+        # Dead Letter Queue (must be declared first)
+        channel.queue_declare(queue=DLQ_QUEUE, durable=True)
+        print(f"  [SOAR] Queue ready: {DLQ_QUEUE} (Dead Letter)", flush=True)
+
+        dlq_args = {
+            "x-dead-letter-exchange": "",
+            "x-dead-letter-routing-key": DLQ_QUEUE,
+        }
+
+        # Layer 2: AI Worker queues
+        for q in [AI_WORKER_NETWORK_QUEUE, AI_WORKER_ENDPOINT_QUEUE, AI_WORKER_IDENTITY_QUEUE]:
+            channel.queue_declare(queue=q, durable=True, arguments=dlq_args)
+            print(f"  [SOAR] Queue ready: {q}", flush=True)
+
+        # Alert Critical — priority queue
+        channel.queue_declare(
+            queue=ALERT_CRITICAL_QUEUE, durable=True,
+            arguments={**dlq_args, "x-max-priority": 10},
+        )
+        print(f"  [SOAR] Queue ready: {ALERT_CRITICAL_QUEUE} (Priority)", flush=True)
+
+        # Phase 4 & 5 queues
+        for q in [CONTAIN_QUEUE, ADAPT_QUEUE, INTEL_EXTERNAL_QUEUE]:
+            channel.queue_declare(queue=q, durable=True, arguments=dlq_args)
+            print(f"  [SOAR] Queue ready: {q}", flush=True)
+
+        connection.close()
+        print("  [SOAR] All RabbitMQ queues initialized.", flush=True)
+    except Exception as e:
+        print(f"  [SOAR] Failed to initialize queues (will retry on first use): {e}", flush=True)
+
+
 if __name__ == "__main__":
     init_indices()
-    
-    # Ensure pika is installed (it is in requirements.txt)
+    init_queues()
+
     HOST = "0.0.0.0"
     PORT = 5000
     server = ThreadingHTTPServer((HOST, PORT), SimpleHandler)
