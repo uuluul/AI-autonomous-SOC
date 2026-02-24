@@ -50,6 +50,13 @@ def create_index():
     create_reports_index(client)
     create_alerts_index(client)
     create_audit_index(client)
+    # Phase 4 & 5 indices
+    create_contain_actions_index(client)
+    create_contain_playbooks_index(client)
+    create_iac_patches_index(client)
+    create_adapt_cycles_index(client)
+    create_incident_timeline_index(client)
+    create_data_poisoning_index(client)
     apply_retention_policy(client)
 
 def create_knn_index(client):
@@ -142,6 +149,130 @@ def create_audit_index(client):
         }
     }
     _create_if_not_exists(client, INDEX_AUDIT_LOGS, index_body)
+
+# ─── Phase 4: CONTAIN indices ─────────────────────────────────
+
+def create_contain_actions_index(client):
+    """Phase 4 containment action records"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "action_id":           {"type": "keyword"},
+                "timestamp":           {"type": "date"},
+                "incident_id":         {"type": "keyword"},
+                "phase_trigger":       {"type": "keyword"},
+                "action_type":         {"type": "keyword"},
+                "target_ip":           {"type": "ip"},
+                "playbook_id":         {"type": "keyword"},
+                "firewall_rule_id":    {"type": "keyword"},
+                "status":              {"type": "keyword"},
+                "execution_time_ms":   {"type": "integer"},
+                "tenant_id":           {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "contain-actions", index_body)
+
+def create_contain_playbooks_index(client):
+    """Phase 4 SOAR playbook storage"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "playbook_id":         {"type": "keyword"},
+                "incident_id":         {"type": "keyword"},
+                "timestamp":           {"type": "date"},
+                "stix_bundle_id":      {"type": "keyword"},
+                "playbook_actions":    {"type": "object"},
+                "status":              {"type": "keyword"},
+                "generated_by":        {"type": "keyword"},
+                "tenant_id":           {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "contain-playbooks", index_body)
+
+def create_iac_patches_index(client):
+    """Phase 4 Infrastructure-as-Code patch records"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "patch_id":            {"type": "keyword"},
+                "incident_id":         {"type": "keyword"},
+                "timestamp":           {"type": "date"},
+                "target_config":       {"type": "keyword"},
+                "patch_type":          {"type": "keyword"},
+                "patch_content":       {"type": "text"},
+                "status":              {"type": "keyword"},
+                "pr_url":              {"type": "keyword"},
+                "tenant_id":           {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "iac-patches", index_body)
+
+
+# ─── Phase 5: ADAPT indices ──────────────────────────────────
+
+def create_adapt_cycles_index(client):
+    """Phase 5 adaptation cycle records"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "cycle_id":              {"type": "keyword"},
+                "incident_id":           {"type": "keyword"},
+                "timestamp":             {"type": "date"},
+                "stix_validation":       {"type": "object"},
+                "knowledge_base_entries": {"type": "integer"},
+                "rl_adjustments":        {"type": "object"},
+                "report_path":           {"type": "keyword"},
+                "status":                {"type": "keyword"},
+                "tenant_id":             {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "adapt-cycles", index_body)
+
+def create_incident_timeline_index(client):
+    """Full Phase 1-5 incident timeline"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "incident_id":      {"type": "keyword"},
+                "timestamp":        {"type": "date"},
+                "phases":           {"type": "object"},
+                "total_duration_ms": {"type": "long"},
+                "risk_score":       {"type": "float"},
+                "outcome":          {"type": "keyword"},
+                "tenant_id":        {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "incident-timeline", index_body)
+
+def create_data_poisoning_index(client):
+    """Phase 2 data poisoning asset tracking"""
+    index_body = {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "asset_id":         {"type": "keyword"},
+                "decoy_id":         {"type": "keyword"},
+                "timestamp":        {"type": "date"},
+                "asset_type":       {"type": "keyword"},
+                "canary_tokens":    {"type": "keyword"},
+                "trigger_count":    {"type": "integer"},
+                "status":           {"type": "keyword"},
+                "tenant_id":        {"type": "keyword"},
+            }
+        },
+    }
+    _create_if_not_exists(client, "data-poisoning-assets", index_body)
+
 
 def update_mappings(client):
     """(Migrstion Utility) Update existing indices with new fields"""
