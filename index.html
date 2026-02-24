@@ -1641,8 +1641,8 @@
 
     <header>
         <div>
-            <div class="brand-eyebrow">NeoVigil · System Architecture v3.0</div>
-            <div class="brand-title"><em>AI-Autonomous</em>-SOC<span class="brand-ver">// v3.0</span></div>
+            <div class="brand-eyebrow">NeoVigil · System Architecture v4.0</div>
+            <div class="brand-title"><em>AI-Autonomous</em>-SOC<span class="brand-ver">// v4.0</span></div>
             <div class="brand-sub">
                 <span data-zh>微服務 · 四層架構 · 五階段防禦週期</span>
                 <span data-en>Microservice · 4-Layer Architecture · 5-Phase Defense Lifecycle</span>
@@ -1906,7 +1906,7 @@
                             <div class="mq-arrow">⟶</div>
                             <div class="mq-queue">
                                 <div class="mq-q-title">📤 <span data-zh>AI Agent Workers (邊緣過濾)</span><span data-en>AI
-                                        Agent Workers (Edge Filter)</span></div>
+                                        Agent Workers (Edge Filter)</span> · <span style="color:var(--muted);font-size:10px">ai_worker.py</span></div>
                                 <div class="mq-item"><span class="tag"
                                         style="background:rgba(34,211,238,.15);color:#22d3ee">log.network</span>🚦
                                     Network AI Worker</div>
@@ -2089,6 +2089,7 @@
                                     </div>
                                 </div>
                                 <div class="ph-files"><span class="ph-file">decoy_manager.py</span><span
+                                        class="ph-file">data_poisoning.py</span><span
                                         class="ph-file">decoy_templates.py</span><span
                                         class="ph-file">fake_secrets.json</span><span
                                         class="ph-file">poisoned_db.sql</span></div>
@@ -2137,6 +2138,7 @@
                                     </div>
                                 </div>
                                 <div class="ph-files"><span class="ph-file">mtd_controller.py</span><span
+                                        class="ph-file">digital_twin.py</span><span
                                         class="ph-file">obfuscation_engine.py</span><span
                                         class="ph-file">mtd_nginx.conf</span><span
                                         class="ph-file">migration_engine.py</span></div>
@@ -2186,7 +2188,8 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="ph-files"><span class="ph-file">to_stix.py</span><span
+                                <div class="ph-files"><span class="ph-file">contain_engine.py</span><span
+                                        class="ph-file">to_stix.py</span><span
                                         class="ph-file">soar_playbook.json</span><span
                                         class="ph-file">mock_soar.py</span><span
                                         class="ph-file">firewall_mock.py</span><span
@@ -2236,7 +2239,8 @@
                                                 Dashboard.</span></div>
                                     </div>
                                 </div>
-                                <div class="ph-files"><span class="ph-file">validate_stix.py</span><span
+                                <div class="ph-files"><span class="ph-file">adapt_engine.py</span><span
+                                        class="ph-file">validate_stix.py</span><span
                                         class="ph-file">setup_knowledge_base.py</span><span
                                         class="ph-file">feedback_loop.py</span><span class="ph-file">to_pdf.py</span>
                                 </div>
@@ -2316,6 +2320,14 @@
                                             Portal</span></strong>
                                     <span><span data-zh>IT 人員上傳 Log / STIX 的操作界面。</span><span data-en>The interface for
                                             IT staff to upload Logs or STIX threat reports.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>阻斷行動中心</span><span data-en>Containment Ops (Phase 4)</span></strong>
+                                    <span><span data-zh>Phase 4 防火牆封鎖記錄、SOAR Playbook 檢視、IaC 自我修復狀態。</span><span data-en>Phase 4 firewall blocks, SOAR playbook viewer, IaC self-healing patch status.</span></span>
+                                </div>
+                                <div class="oc-feat">
+                                    <strong><span data-zh>自適應學習中心</span><span data-en>Adaptation & Learning (Phase 5)</span></strong>
+                                    <span><span data-zh>Phase 5 知識庫成長、RLHF 回饋指標、事件時間線、PDF 報告下載。</span><span data-en>Phase 5 KB growth, RLHF feedback metrics, incident timelines, PDF report downloads.</span></span>
                                 </div>
                             </div>
                         </div>
@@ -2500,8 +2512,8 @@
                     en: 'Full intervention — physically cuts off the threat and fixes the root cause. Three parallel actions: SOAR blocks the IP, IaC self-heals the vulnerable code, and Audit Logger records the complete evidence chain.'
                 },
                 steps: {
-                    zh: ['S1: to_stix.py 輸出標準威脅情資 + LLM 撰寫 soar_playbook.json', 'S2: mock_soar.py → firewall_mock.py → REJECT 封鎖攻擊源 IP', 'S3: AI 分析漏洞根因 → 自動寫 Patch → GitHub PR → CI/CD 重部署', 'S4: audit_logger.py 寫入不可竄改的時間戳記稽核記錄'],
-                    en: ['S1: to_stix.py outputs standard threat intel + LLM writes soar_playbook.json', 'S2: mock_soar.py → firewall_mock.py → REJECT blocks attacker IP', 'S3: AI analyzes vuln root cause → auto-writes Patch → GitHub PR → CI/CD redeploys', 'S4: audit_logger.py writes immutable timestamped audit record']
+                    zh: ['S1: contain_engine.py 啟動三個平行子引擎（Playbook + 防火牆 + IaC）', 'S2: to_stix.py 輸出標準威脅情資 + LLM 撰寫 soar_playbook.json', 'S3: firewall_mock.py → REJECT 封鎖攻擊源 IP（最多 20 條規則）', 'S4: AI 分析漏洞根因 → 自動寫 Patch → iac-patches 索引', 'S5: audit_logger.py 寫入不可竄改的時間戳記稽核記錄 → 派送至 Phase 5'],
+                    en: ['S1: contain_engine.py launches 3 parallel sub-engines (Playbook + Firewall + IaC)', 'S2: to_stix.py outputs threat intel + LLM writes soar_playbook.json', 'S3: firewall_mock.py → REJECT blocks attacker IP (max 20 rules)', 'S4: AI analyzes vuln root cause → auto-writes Patch → iac-patches index', 'S5: audit_logger.py writes immutable audit record → dispatches to Phase 5']
                 },
                 tag: 'PHASE 4 · CONTAIN', bg: 'rgba(239,68,68,.15)', tc: '#ef4444'
             },
@@ -2513,21 +2525,21 @@
                     en: 'Converts a one-time defense into permanent immunity. Every successful or failed defense feeds Commander AI, using RLHF to make the system measurably smarter after each incident.'
                 },
                 steps: {
-                    zh: ['S1: validate_stix.py 品質控管（STIX 2.1 國際標準）', 'S2: setup_knowledge_base.py 將攻擊 TTPs 存入 OpenSearch KNN 向量庫', 'S3: feedback_loop.py RLHF 調整 Commander AI Prompt 權重', 'S4: to_pdf.py 產出 Executive Report → 推送至 Dashboard'],
-                    en: ['S1: validate_stix.py quality control (STIX 2.1 international standard)', 'S2: setup_knowledge_base.py stores attack TTPs in OpenSearch KNN vector DB', 'S3: feedback_loop.py RLHF adjusts Commander AI Prompt weights', 'S4: to_pdf.py generates Executive Report → pushed to Dashboard']
+                    zh: ['S1: adapt_engine.py 啟動五步驟自適應管線', 'S2: validate_stix.py 品質控管（STIX 2.1 國際標準）', 'S3: 將攻擊 TTPs 存入 OpenSearch KNN 向量庫（cti-knowledge-base）', 'S4: feedback_loop.py RLHF 比較預測 vs 實際 → 調整閾值', 'S5: 建構跨五階段事件時間線 → to_pdf.py 產出 Executive Report'],
+                    en: ['S1: adapt_engine.py launches 5-step adaptation pipeline', 'S2: validate_stix.py quality control (STIX 2.1 international standard)', 'S3: Stores attacker TTPs in OpenSearch KNN vector DB (cti-knowledge-base)', 'S4: feedback_loop.py RLHF compares predictions vs actuals → adjusts thresholds', 'S5: Builds cross-5-phase incident timeline → to_pdf.py generates Executive Report']
                 },
                 tag: 'PHASE 5 · ADAPT', bg: 'rgba(16,185,129,.15)', tc: '#10b981'
             },
             dash: {
                 icon: '📡',
-                name: { zh: '實時戰情室 — Dashboard', en: 'Live Operations Dashboard' },
+                name: { zh: '實時戰情室 — Dashboard（10 頁）', en: 'Live Operations Dashboard (10 Pages)' },
                 body: {
-                    zh: '高階主管與 SOC 分析師的統一作戰界面。所有數據來自 OpenSearch 即時查詢。集成威脅地圖、AI 預測路徑視覺化、MTD 狀態監控與人工報案入口於一體。',
-                    en: 'The unified command interface for executives and SOC analysts. All data is sourced from OpenSearch live queries. Integrates Threat Map, AI-predicted lateral movement visualization, MTD status monitoring, and the manual report portal.'
+                    zh: '高階主管與 SOC 分析師的統一作戰界面。所有數據來自 OpenSearch 即時查詢。集成威脅地圖、AI 預測路徑視覺化、MTD 狀態監控、Phase 4 阻斷行動中心、Phase 5 自適應學習中心與人工報案入口於一體。',
+                    en: 'The unified command interface for executives and SOC analysts. All data is sourced from OpenSearch live queries. Integrates Threat Map, AI-predicted lateral movement visualization, MTD status monitoring, Phase 4 Containment Ops, Phase 5 Adaptation & Learning, and the manual report portal.'
                 },
                 steps: {
-                    zh: ['從 OpenSearch Hot Tier 即時拉取最新告警', '顯示 Phase 1 預測的攻擊橫向移動路徑地圖', '顯示 Phase 2/3 的蜜罐觸發狀態與 MTD 變異進度', '接收 Phase 5 自動推送的 PDF 執行摘要報告'],
-                    en: ['Pulls latest alerts from OpenSearch Hot Tier in real time', 'Displays Phase 1 predicted lateral movement path map', 'Shows Phase 2/3 honeypot trigger status and MTD mutation progress', 'Receives Phase 5 auto-pushed PDF executive summary report']
+                    zh: ['從 OpenSearch Hot Tier 即時拉取最新告警', '顯示 Phase 1 預測的攻擊橫向移動路徑地圖', '顯示 Phase 2/3 的蜜罐觸發狀態與 MTD 變異進度', 'Phase 4 阻斷行動中心：防火牆封鎖記錄 + SOAR Playbook + IaC 修復狀態', 'Phase 5 自適應中心：知識庫成長 + RLHF 回饋 + 事件時間線 + PDF 報告'],
+                    en: ['Pulls latest alerts from OpenSearch Hot Tier in real time', 'Displays Phase 1 predicted lateral movement path map', 'Shows Phase 2/3 honeypot trigger status and MTD mutation progress', 'Phase 4 Containment Ops: firewall blocks + SOAR playbooks + IaC patch status', 'Phase 5 Adaptation: KB growth + RLHF feedback + incident timelines + PDF reports']
                 },
                 tag: 'OUTPUT · LAYER 4', bg: 'rgba(129,140,248,.15)', tc: '#818cf8'
             },
