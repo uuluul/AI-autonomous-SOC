@@ -114,6 +114,7 @@ def _emit_zero_log_event(title: str, content: str, source: str = "crawler"):
         )
         channel = connection.channel()
         channel.queue_declare(queue="zero_log_events", durable=True)
+        channel.queue_declare(queue="intel_external", durable=True)
 
         for cve_id in list(set(cves))[:3]:  # Max 3 CVEs per article
             event = {
@@ -124,9 +125,17 @@ def _emit_zero_log_event(title: str, content: str, source: str = "crawler"):
                 "source_article": title[:200],
                 "timestamp": datetime.now().isoformat(),
             }
+            # Publish to zero_log_events (Phase 1 prediction)
             channel.basic_publish(
                 exchange="",
                 routing_key="zero_log_events",
+                body=json.dumps(event),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+            # Publish to intel_external (Layer 1 intelligence routing)
+            channel.basic_publish(
+                exchange="",
+                routing_key="intel_external",
                 body=json.dumps(event),
                 properties=pika.BasicProperties(delivery_mode=2),
             )

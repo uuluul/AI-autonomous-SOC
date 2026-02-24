@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "full-stack",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "--build"],
+      "port": 8501
+    },
+    {
+      "name": "staging",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "docker-compose.staging.yml", "up", "--build"],
+      "port": 9200
+    },
+    {
+      "name": "streamlit-ui",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "src/app_ui.py", "--server.port", "8501", "--server.address", "0.0.0.0"],
+      "port": 8501
+    },
+    {
+      "name": "mock-llm",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["src/mock_llm_server.py"],
+      "port": 8000
+    },
+    {
+      "name": "soar-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["src/mock_soar.py"],
+      "port": 5000
+    }
+  ]
+}

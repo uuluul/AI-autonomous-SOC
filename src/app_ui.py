@@ -426,6 +426,8 @@ if check_permission("VIEW_AUDIT"):
     nav_options.append("📜 Audit & Compliance Trail")
 nav_options.append("🎯 Predictive Threat Map")
 nav_options.append("🛡️ Moving Target Defense")
+nav_options.append("🔒 Containment Operations")
+nav_options.append("📊 Adaptation & Learning")
 
 # Initialize Navigation State
 if "current_page" not in st.session_state:
@@ -522,7 +524,158 @@ if page == "🚨 Internal Threat Monitor (SOC)":
     with tel2: render_telemetry_card("Network", "Suricata / NDR", status_network)
     with tel3: render_telemetry_card("Identity", "Active Directory", status_identity)
     with tel4: render_telemetry_card("Deception", "NeoVigil Honeypots", status_deception)
-    
+
+    st.markdown("")
+
+    # ─── Layer 2: AI Worker Edge Filtering Status ───────────────
+    st.markdown("#### 🤖 AI Worker Edge Filtering (Layer 2)")
+
+    def get_ai_worker_stats(domain):
+        """Query OpenSearch for AI Worker processing stats."""
+        try:
+            client = get_opensearch_client()
+            # Count escalated vs filtered for this domain
+            resp = client.search(
+                index="security-logs-knn",
+                body={
+                    "size": 0,
+                    "query": {"bool": {"must": [{"term": {"ai_worker_domain": domain}}]}},
+                    "aggs": {
+                        "escalated": {"filter": {"term": {"ai_worker_escalated": True}}},
+                        "total": {"value_count": {"field": "ai_worker_domain"}}
+                    }
+                }
+            )
+            total = resp["aggregations"]["total"]["value"]
+            escalated = resp["aggregations"]["escalated"]["doc_count"]
+            filtered = total - escalated
+            return {"total": total, "escalated": escalated, "filtered": filtered}
+        except Exception:
+            return {"total": 0, "escalated": 0, "filtered": 0}
+
+    def render_ai_worker_card(domain, icon, stats):
+        total = stats["total"]
+        filtered = stats["filtered"]
+        escalated = stats["escalated"]
+        filter_rate = (filtered / max(total, 1)) * 100
+
+        status_color = "#00d4aa" if total > 0 else "#888"
+        status_text = "🟢 Active" if total > 0 else "⚪ Idle"
+
+        html = f"""
+        <div style="background:linear-gradient(135deg, #0d1b2a, #1b2838);
+            padding:14px;border-radius:10px;text-align:center;
+            border:1px solid #1e3a5f;box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+            <p style="margin:0;font-size:24px;">{icon}</p>
+            <p style="margin:4px 0 0;font-weight:700;color:#e0e0e0;font-size:13px;">{domain.title()} Worker</p>
+            <p style="margin:2px 0;color:{status_color};font-size:11px;">{status_text}</p>
+            <p style="margin:4px 0 0;color:#9db4c0;font-size:11px;">
+                Processed: {total} | Filtered: {filtered} | Escalated: {escalated}
+            </p>
+            <p style="margin:2px 0 0;color:#4fc3f7;font-size:12px;font-weight:bold;">
+                Filter Rate: {filter_rate:.0f}%
+            </p>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+
+    net_stats = get_ai_worker_stats("network")
+    ep_stats = get_ai_worker_stats("endpoint")
+    id_stats = get_ai_worker_stats("identity")
+
+    aw1, aw2, aw3 = st.columns(3)
+    with aw1: render_ai_worker_card("network", "🌐", net_stats)
+    with aw2: render_ai_worker_card("endpoint", "💻", ep_stats)
+    with aw3: render_ai_worker_card("identity", "🔑", id_stats)
+
+    st.markdown("")
+
+    # ─── DLQ Monitor (Dead Letter Queue) ───────────────────────
+    try:
+        dlq_client = get_opensearch_client()
+        if dlq_client.indices.exists(index="dlq-messages"):
+            dlq_resp = dlq_client.count(index="dlq-messages")
+            dlq_count = dlq_resp.get("count", 0)
+            if dlq_count > 0:
+                st.warning(f"⚠️ **Dead Letter Queue:** {dlq_count} unprocessed messages require attention.")
+                with st.expander("🗂️ View DLQ Messages"):
+                    dlq_data = dlq_client.search(
+                        index="dlq-messages",
+                        body={"query": {"match_all": {}}, "sort": [{"timestamp": "desc"}], "size": 10}
+                    )
+                    for hit in dlq_data["hits"]["hits"]:
+                        src = hit["_source"]
+                        st.markdown(f"- **{src.get('original_queue', 'unknown')}** → `{src.get('error', 'No error')}` ({src.get('timestamp', 'N/A')[:19]})")
+    except Exception:
+        pass
+
+    st.markdown("")
+
+    # ─── Manual Priority Alert Injection ───────────────────────
+    with st.expander("🚨 Manual High-Priority Alert Injection"):
+        st.caption("Submit a manual alert directly to the priority queue (priority=10). Bypasses AI Worker filtering.")
+
+        manual_col1, manual_col2 = st.columns(2)
+        with manual_col1:
+            manual_ip = st.text_input("Suspicious IP Address", placeholder="e.g., 185.220.101.1")
+            manual_type = st.selectbox("Attack Type", ["Manual Report", "Insider Threat", "APT Activity", "Data Exfiltration", "Ransomware"])
+        with manual_col2:
+            manual_severity = st.selectbox("Severity", ["Critical", "High", "Medium"])
+            manual_notes = st.text_area("Analyst Notes", placeholder="Describe the observed behavior...")
+
+        if st.button("📤 Submit to Priority Queue", type="primary"):
+            if manual_ip and manual_notes:
+                try:
+                    import pika
+                    rmq_host = os.getenv("RABBITMQ_HOST", "rabbitmq")
+                    credentials = pika.PlainCredentials(
+                        os.getenv("RABBITMQ_USER", "user"),
+                        os.getenv("RABBITMQ_PASS", "password")
+                    )
+                    connection = pika.BlockingConnection(
+                        pika.ConnectionParameters(host=rmq_host, credentials=credentials)
+                    )
+                    channel = connection.channel()
+
+                    manual_alert = {
+                        "source": "manual_analyst_input",
+                        "source_ip": manual_ip,
+                        "attack_type": manual_type,
+                        "severity": manual_severity,
+                        "analyst_notes": manual_notes,
+                        "submitted_by": st.session_state.get("logged_in_user", "Unknown"),
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+
+                    channel.basic_publish(
+                        exchange="",
+                        routing_key="alert_critical",
+                        body=json.dumps(manual_alert),
+                        properties=pika.BasicProperties(
+                            delivery_mode=2,
+                            priority=10
+                        )
+                    )
+                    connection.close()
+
+                    # Audit log
+                    audit_logger.log_event(
+                        actor=st.session_state.get("logged_in_user", "Admin"),
+                        action="MANUAL_ALERT_INJECT",
+                        target=manual_ip,
+                        status="SUCCESS",
+                        justification=manual_notes[:200],
+                        details={"severity": manual_severity, "type": manual_type},
+                        role=st.session_state.get("user_role", "Unknown"),
+                        session_id=st.session_state.get("session_id", "N/A")
+                    )
+
+                    st.success(f"✅ Alert submitted to priority queue for {manual_ip}")
+                except Exception as e:
+                    st.error(f"Failed to submit alert: {e}")
+            else:
+                st.warning("Please provide both IP address and analyst notes.")
+
     st.markdown("")
     
     if df.empty:
@@ -1489,7 +1642,7 @@ elif page == "🛡️ Moving Target Defense":
     st.markdown("---")
 
     # ─── Tabs ─────────────────────────────────────────
-    tab1, tab2, tab3, tab4 = st.tabs(["🎭 Obfuscation Rules", "⏳ Pending Approvals", "🔄 Migrations", "📝 Audit Log"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎭 Obfuscation Rules", "⏳ Pending Approvals", "🔄 Migrations", "📝 Audit Log", "🧬 Digital Twin"])
 
     # ── Tab 1: Active Obfuscation Rules ───────────────
     with tab1:
@@ -1580,3 +1733,285 @@ elif page == "🛡️ Moving Target Defense":
                 st.dataframe(audit_df[display_cols], use_container_width=True, hide_index=True)
         else:
             st.info("No MTD audit entries yet. Actions will be logged here as they occur.")
+
+    # ── Tab 5: Digital Twin Validation ────────────────
+    with tab5:
+        st.subheader("🧬 Cyber Digital Twin Validation")
+        st.caption("Pre-migration simulation results. Each mutation is validated in an isolated twin environment before production execution.")
+
+        twin_results = []
+        try:
+            twin_client = get_opensearch_client()
+            if twin_client.indices.exists(index="mtd-active-mutations"):
+                twin_resp = twin_client.search(
+                    index="mtd-active-mutations",
+                    body={
+                        "query": {"exists": {"field": "twin_validation"}},
+                        "sort": [{"timestamp": {"order": "desc", "unmapped_type": "date"}}],
+                        "size": 20
+                    }
+                )
+                twin_results = [h["_source"] for h in twin_resp["hits"]["hits"]]
+        except Exception:
+            pass
+
+        if twin_results:
+            # Metrics
+            total_twins = len(twin_results)
+            passed = sum(1 for t in twin_results if t.get("twin_validation", {}).get("valid", False))
+            blocked = total_twins - passed
+
+            tc1, tc2, tc3 = st.columns(3)
+            tc1.metric("Total Validations", total_twins)
+            tc2.metric("✅ Passed", passed)
+            tc3.metric("🚫 Blocked by Twin", blocked)
+
+            for twin in twin_results:
+                tv = twin.get("twin_validation", {})
+                valid = tv.get("valid", False)
+                icon = "✅" if valid else "🚫"
+                status_label = "PASSED" if valid else "BLOCKED"
+
+                with st.expander(f"{icon} {twin.get('target_container', 'N/A')} — {status_label}", expanded=not valid):
+                    st.markdown(f"**Migration ID:** `{twin.get('migration_id', 'N/A')[:16]}`")
+                    st.markdown(f"**Timestamp:** {twin.get('timestamp', 'N/A')[:19]}")
+
+                    # Validation details
+                    metrics = tv.get("metrics", {})
+                    if metrics:
+                        vm1, vm2, vm3 = st.columns(3)
+                        vm1.metric("Health Check", "✅" if metrics.get("health_pass") else "❌")
+                        vm2.metric("Connectivity", "✅" if metrics.get("connectivity_pass") else "❌")
+                        vm3.metric("Response Time", f"{metrics.get('response_time_ms', 'N/A')}ms")
+
+                    issues = tv.get("issues", [])
+                    if issues:
+                        st.markdown("**Issues Detected:**")
+                        for issue in issues:
+                            st.error(f"- {issue}")
+        else:
+            st.info("No Digital Twin validations yet. Twin simulations run automatically before each container migration.")
+
+# ════════════════════════════════════════════════════════════════
+# 🔒 Containment Operations (Phase 4)
+# ════════════════════════════════════════════════════════════════
+elif page == "🔒 Containment Operations":
+    st.title("🔒 Containment Operations (Phase 4)")
+    st.caption("Automated containment: SOAR playbooks, firewall blocks, and IaC self-healing patches.")
+
+    tab1, tab2, tab3 = st.tabs(["🛑 Firewall Blocks", "📋 SOAR Playbooks", "🔧 IaC Patches"])
+
+    # Fetch data
+    contain_client = get_opensearch_client()
+    contain_actions = []
+    playbooks_p4 = []
+    patches = []
+
+    try:
+        resp = contain_client.search(
+            index="contain-actions",
+            body={"query": {"match_all": {}}, "sort": [{"timestamp": "desc"}], "size": 50}
+        )
+        contain_actions = [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
+    except Exception:
+        pass
+
+    try:
+        resp = contain_client.search(
+            index="contain-playbooks",
+            body={"query": {"match_all": {}}, "sort": [{"timestamp": "desc"}], "size": 20}
+        )
+        playbooks_p4 = [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
+    except Exception:
+        pass
+
+    try:
+        resp = contain_client.search(
+            index="iac-patches",
+            body={"query": {"match_all": {}}, "sort": [{"timestamp": "desc"}], "size": 20}
+        )
+        patches = [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
+    except Exception:
+        pass
+
+    with tab1:
+        st.subheader("🛑 Active Firewall Blocks")
+        if contain_actions:
+            # Metrics
+            total = len(contain_actions)
+            success = sum(1 for a in contain_actions if a.get("status") == "SUCCESS")
+            avg_time = sum(a.get("execution_time_ms", 0) for a in contain_actions) / max(total, 1)
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Blocks", total)
+            m2.metric("Success Rate", f"{success/max(total,1)*100:.0f}%")
+            m3.metric("Avg Block Time", f"{avg_time:.0f}ms")
+
+            # Table
+            block_df = pd.DataFrame(contain_actions)
+            display_cols = [c for c in ["action_id", "target_ip", "status", "execution_time_ms", "timestamp", "incident_id"] if c in block_df.columns]
+            if display_cols:
+                st.dataframe(block_df[display_cols], use_container_width=True, hide_index=True)
+        else:
+            st.info("No firewall containment actions yet.")
+
+    with tab2:
+        st.subheader("📋 Generated SOAR Playbooks")
+        if playbooks_p4:
+            for pb in playbooks_p4[:10]:
+                with st.expander(f"Playbook {pb.get('playbook_id', 'N/A')} — {pb.get('timestamp', 'N/A')[:19]}"):
+                    st.markdown(f"**Incident:** `{pb.get('incident_id', 'N/A')}`")
+                    st.markdown(f"**Status:** {pb.get('status', 'N/A')}")
+                    st.markdown(f"**Generated by:** {pb.get('generated_by', 'N/A')}")
+                    actions = pb.get("playbook_actions", [])
+                    if actions:
+                        st.json(actions)
+        else:
+            st.info("No SOAR playbooks generated yet.")
+
+    with tab3:
+        st.subheader("🔧 Infrastructure-as-Code Patches")
+        if patches:
+            for p in patches[:10]:
+                with st.expander(f"Patch {p.get('patch_id', 'N/A')} — {p.get('target_config', 'N/A')}"):
+                    st.markdown(f"**Incident:** `{p.get('incident_id', 'N/A')}`")
+                    st.markdown(f"**Type:** {p.get('patch_type', 'N/A')}")
+                    st.markdown(f"**Status:** {p.get('status', 'N/A')}")
+                    st.code(p.get("patch_content", "No content"), language="nginx")
+        else:
+            st.info("No IaC patches generated yet.")
+
+
+# ════════════════════════════════════════════════════════════════
+# 📊 Adaptation & Learning (Phase 5)
+# ════════════════════════════════════════════════════════════════
+elif page == "📊 Adaptation & Learning":
+    st.title("📊 Adaptation & Learning (Phase 5)")
+    st.caption("Closed-loop learning: STIX validation, knowledge base growth, RLHF adjustments, and executive reports.")
+
+    tab1, tab2, tab3 = st.tabs(["🔄 Adaptation Cycles", "🧠 Knowledge Base", "📄 Reports"])
+
+    # Fetch data
+    adapt_client = get_opensearch_client()
+    adapt_cycles = []
+    kb_count = 0
+
+    try:
+        resp = adapt_client.search(
+            index="adapt-cycles",
+            body={"query": {"match_all": {}}, "sort": [{"timestamp": "desc"}], "size": 20}
+        )
+        adapt_cycles = [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
+    except Exception:
+        pass
+
+    try:
+        resp = adapt_client.count(index="cti-knowledge-base")
+        kb_count = resp.get("count", 0)
+    except Exception:
+        pass
+
+    with tab1:
+        st.subheader("🔄 Adaptation Cycle History")
+        if adapt_cycles:
+            # Metrics
+            total_cycles = len(adapt_cycles)
+            total_kb = sum(c.get("knowledge_base_entries", 0) for c in adapt_cycles)
+            total_validated = sum(
+                c.get("rl_adjustments", {}).get("validated_count", 0)
+                for c in adapt_cycles
+            )
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Cycles", total_cycles)
+            m2.metric("KB Entries Added", total_kb)
+            m3.metric("Validated Predictions", total_validated)
+
+            # Table
+            for cycle in adapt_cycles[:10]:
+                with st.expander(f"Cycle {cycle.get('cycle_id', 'N/A')} — {cycle.get('timestamp', 'N/A')[:19]}"):
+                    st.markdown(f"**Incident:** `{cycle.get('incident_id', 'N/A')}`")
+                    st.markdown(f"**Status:** {cycle.get('status', 'N/A')}")
+                    st.markdown(f"**KB Entries:** {cycle.get('knowledge_base_entries', 0)}")
+
+                    # STIX Validation
+                    stix = cycle.get("stix_validation", {})
+                    if stix:
+                        st.markdown(f"**STIX Valid:** {stix.get('valid', 'N/A')}")
+
+                    # RL Adjustments
+                    rl = cycle.get("rl_adjustments", {})
+                    if rl.get("weight_recommendations"):
+                        st.markdown("**Weight Recommendations:**")
+                        for rec in rl["weight_recommendations"]:
+                            st.markdown(
+                                f"- `{rec.get('parameter')}`: "
+                                f"{rec.get('current')} -> {rec.get('recommended')} "
+                                f"({rec.get('reason', '')})"
+                            )
+
+                    # Report path
+                    report = cycle.get("report_path")
+                    if report:
+                        st.markdown(f"**Report:** `{report}`")
+        else:
+            st.info("No adaptation cycles yet. Cycles are triggered after Phase 4 completion.")
+
+    with tab2:
+        st.subheader("🧠 Knowledge Base Status")
+        st.metric("Total Knowledge Base Entries", kb_count)
+        st.caption(
+            "The knowledge base stores validated attacker TTPs from incidents. "
+            "These are used by Phase 1 PREDICT for semantic recall during RAG."
+        )
+
+        # Show recent KB entries
+        try:
+            resp = adapt_client.search(
+                index="cti-knowledge-base",
+                body={
+                    "query": {"term": {"source": "incident_learning"}},
+                    "sort": [{"last_updated": "desc"}],
+                    "size": 10,
+                }
+            )
+            kb_entries = [h["_source"] for h in resp.get("hits", {}).get("hits", [])]
+            if kb_entries:
+                st.markdown("**Recent Incident-Learned TTPs:**")
+                for entry in kb_entries:
+                    st.markdown(
+                        f"- **{entry.get('external_id', 'N/A')}** — "
+                        f"{entry.get('name', 'Unknown')}: "
+                        f"{entry.get('description', '')[:150]}..."
+                    )
+        except Exception:
+            pass
+
+    with tab3:
+        st.subheader("📄 Generated Reports")
+        import glob
+        report_dir = "out"
+        report_files = sorted(
+            glob.glob(os.path.join(report_dir, "incident_*.pdf")),
+            key=os.path.getmtime,
+            reverse=True,
+        ) if os.path.exists(report_dir) else []
+
+        if report_files:
+            for rf in report_files[:20]:
+                fname = os.path.basename(rf)
+                fsize = os.path.getsize(rf) / 1024
+                st.markdown(f"- **{fname}** ({fsize:.1f} KB)")
+                try:
+                    with open(rf, "rb") as f:
+                        st.download_button(
+                            label=f"Download {fname}",
+                            data=f.read(),
+                            file_name=fname,
+                            mime="application/pdf",
+                            key=f"dl_{fname}",
+                        )
+                except Exception:
+                    pass
+        else:
+            st.info("No incident reports generated yet.")

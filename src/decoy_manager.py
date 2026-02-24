@@ -703,21 +703,57 @@ class DecoyManager:
                 self.docker, decoy_id, config, network.name
             )
 
-            # 5c. Deploy Fluent Bit sidecar (dual-homed)
+            # 5c. Inject data poisoning (Phase 2 enhancement)
+            try:
+                from data_poisoning import DataPoisonGenerator
+                poisoner = DataPoisonGenerator()
+                decoy_profile = {
+                    "service_name": config.get("service_name", "generic"),
+                    "decoy_id": decoy_id,
+                }
+                fake_secrets = poisoner.generate_fake_secrets(decoy_profile)
+                poisoned_sql = poisoner.generate_poisoned_db(decoy_profile)
+
+                # Inject files into container via docker exec
+                container = self.docker.containers.get(container_id)
+                import io, tarfile
+                # Create tar archive with poisoned files
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    secrets_data = json.dumps(fake_secrets, indent=2).encode()
+                    info = tarfile.TarInfo(name="fake_secrets.json")
+                    info.size = len(secrets_data)
+                    tar.addfile(info, io.BytesIO(secrets_data))
+
+                    sql_data = poisoned_sql.encode()
+                    info2 = tarfile.TarInfo(name="poisoned_db.sql")
+                    info2.size = len(sql_data)
+                    tar.addfile(info2, io.BytesIO(sql_data))
+
+                tar_stream.seek(0)
+                container.put_archive("/tmp", tar_stream)
+                logger.info(
+                    f"Data poisoning injected into decoy {decoy_id[:8]} "
+                    f"(fake_secrets.json + poisoned_db.sql)"
+                )
+            except Exception as poison_exc:
+                logger.warning(f"Data poisoning injection skipped: {poison_exc}")
+
+            # 5d. Deploy Fluent Bit sidecar (dual-homed)
             sidecar_id = deploy_fluent_bit_sidecar(
                 self.docker, decoy_id, network.name
             )
 
-            # 5d. Index state to OpenSearch
+            # 5f. Index state to OpenSearch
             self._index_state(
                 decoy_id, prediction_id, config, placement, ttl_hours,
                 "ACTIVE", container_id, sidecar_id, network.name,
             )
 
-            # 5e. Schedule TTL teardown
+            # 5g. Schedule TTL teardown
             self.lifecycle.schedule_teardown(decoy_id, ttl_hours)
 
-            # 5f. Persist local state
+            # 5h. Persist local state
             self.state["active_decoys"][decoy_id] = {
                 "prediction_id": prediction_id,
                 "container_id": container_id,

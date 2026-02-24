@@ -474,10 +474,38 @@ class MTDController:
             except Exception as exc:
                 logger.error(f"[{action_id}] Obfuscation failed: {exc}")
 
-        # ─── Migration ────────────────────────────────
+        # ─── Migration (with Digital Twin validation) ─
         if action_record.get("migrate"):
             try:
                 target_host = action_record.get("target_host", "")
+
+                # Digital Twin pre-validation (Phase 3 enhancement)
+                try:
+                    from digital_twin import CyberDigitalTwin
+                    twin = CyberDigitalTwin()
+                    twin_result = twin.run_validation_suite(
+                        target_service=target_host,
+                        mutation_plan=action_record,
+                    )
+                    action_record["twin_validation"] = {
+                        "valid": twin_result.get("valid"),
+                        "issues": twin_result.get("issues", []),
+                        "duration_ms": twin_result.get("metrics", {}).get("total_duration_ms", 0),
+                    }
+                    if not twin_result.get("valid"):
+                        action_record["status"] = "BLOCKED_BY_TWIN"
+                        self._index_audit(action_record)
+                        logger.warning(
+                            f"[{action_id}] Migration BLOCKED by Digital Twin: "
+                            f"{twin_result.get('issues')}"
+                        )
+                        return
+                    logger.info(f"[{action_id}] Digital Twin validation PASSED")
+                except ImportError:
+                    logger.debug(f"[{action_id}] Digital Twin not available, skipping")
+                except Exception as twin_exc:
+                    logger.warning(f"[{action_id}] Digital Twin validation skipped: {twin_exc}")
+
                 result = self.migration.execute_migration(
                     target_container_name=target_host,
                     trigger_reason=(
@@ -503,6 +531,48 @@ class MTDController:
             f"[{action_id}] MTD action completed: "
             f"{action_record['action_type']} (score={action_record['score']})"
         )
+
+        # ─── Dispatch to Phase 4: CONTAIN ────────────
+        try:
+            contain_payload = {
+                "incident_id": str(uuid.uuid4()),
+                "trigger_source": "phase3_mtd_complete",
+                "prediction_id": action_record.get("prediction_id", ""),
+                "attacker_ips": [action_record.get("scanner_ip", "")],
+                "target_ips": [action_record.get("target_ip", "")],
+                "kill_chain": action_record.get("predicted_kill_chain", []),
+                "risk_score": action_record.get("score", 0),
+                "mtd_action_id": action_record["action_id"],
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            _user = os.getenv("RABBITMQ_USER", "user")
+            _pass = os.getenv("RABBITMQ_PASS", "password")
+            _creds = pika.PlainCredentials(_user, _pass)
+            _conn = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=RABBITMQ_HOST, credentials=_creds,
+                    connection_attempts=2, retry_delay=1,
+                )
+            )
+            _ch = _conn.channel()
+            _dlq_args = {
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": "dlq_main",
+            }
+            _ch.queue_declare(queue="contain_tasks", durable=True, arguments=_dlq_args)
+            _ch.basic_publish(
+                exchange="",
+                routing_key="contain_tasks",
+                body=json.dumps(contain_payload, default=str),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+            _conn.close()
+            logger.info(
+                f"[{action_id}] Dispatched to Phase 4 CONTAIN "
+                f"(incident={contain_payload['incident_id'][:8]})"
+            )
+        except Exception as exc:
+            logger.warning(f"[{action_id}] Phase 4 dispatch failed: {exc}")
 
     # ─── Approval Queue ───────────────────────────────────
 
