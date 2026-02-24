@@ -555,7 +555,11 @@ class MTDController:
                 )
             )
             _ch = _conn.channel()
-            _ch.queue_declare(queue="contain_tasks", durable=True)
+            _dlq_args = {
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": "dlq_main",
+            }
+            _ch.queue_declare(queue="contain_tasks", durable=True, arguments=_dlq_args)
             _ch.basic_publish(
                 exchange="",
                 routing_key="contain_tasks",

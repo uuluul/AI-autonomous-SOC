@@ -524,7 +524,11 @@ class AdaptEngine:
                     )
                 )
                 channel = connection.channel()
-                channel.queue_declare(queue=ADAPT_QUEUE, durable=True)
+                dlq_args = {
+                    "x-dead-letter-exchange": "",
+                    "x-dead-letter-routing-key": "dlq_main",
+                }
+                channel.queue_declare(queue=ADAPT_QUEUE, durable=True, arguments=dlq_args)
                 channel.basic_qos(prefetch_count=1)
                 channel.basic_consume(
                     queue=ADAPT_QUEUE,

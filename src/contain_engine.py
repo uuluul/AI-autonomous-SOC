@@ -560,7 +560,11 @@ Return ONLY a valid JSON array."""
                 )
             )
             channel = connection.channel()
-            channel.queue_declare(queue=ADAPT_QUEUE, durable=True)
+            dlq_args = {
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": "dlq_main",
+            }
+            channel.queue_declare(queue=ADAPT_QUEUE, durable=True, arguments=dlq_args)
             channel.basic_publish(
                 exchange="",
                 routing_key=ADAPT_QUEUE,
@@ -599,7 +603,11 @@ Return ONLY a valid JSON array."""
                     )
                 )
                 channel = connection.channel()
-                channel.queue_declare(queue=CONTAIN_QUEUE, durable=True)
+                dlq_args = {
+                    "x-dead-letter-exchange": "",
+                    "x-dead-letter-routing-key": "dlq_main",
+                }
+                channel.queue_declare(queue=CONTAIN_QUEUE, durable=True, arguments=dlq_args)
                 channel.basic_qos(prefetch_count=1)
                 channel.basic_consume(
                     queue=CONTAIN_QUEUE,

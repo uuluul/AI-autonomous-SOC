@@ -274,11 +274,15 @@ class AIWorker:
                     )
                 )
                 channel = connection.channel()
-                channel.queue_declare(queue=self.INPUT_QUEUE, durable=True)
+                dlq_args = {
+                    "x-dead-letter-exchange": "",
+                    "x-dead-letter-routing-key": "dlq_main",
+                }
+                channel.queue_declare(queue=self.INPUT_QUEUE, durable=True, arguments=dlq_args)
                 channel.queue_declare(
                     queue=ALERT_CRITICAL_QUEUE,
                     durable=True,
-                    arguments={"x-max-priority": 10},
+                    arguments={**dlq_args, "x-max-priority": 10},
                 )
                 channel.basic_qos(prefetch_count=10)
                 channel.basic_consume(
