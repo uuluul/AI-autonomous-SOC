@@ -6,14 +6,14 @@
 </div>
 
 [![Architecture](https://img.shields.io/badge/Architecture-Active%20Adversarial%20Defense-blueviolet?style=flat)]()
-[![Phase](https://img.shields.io/badge/Active%20Defense-Triad%20Complete-brightgreen?style=flat)]()
+[![Phase](https://img.shields.io/badge/5--Phase%20Defense%20Lifecycle-Complete-brightgreen?style=flat)]()
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)]()
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)]()
 [![OpenSearch](https://img.shields.io/badge/OpenSearch-Vector%20KNN-005EB8?style=flat)]()
 [![RabbitMQ](https://img.shields.io/badge/Queue-RabbitMQ-FF6600?style=flat&logo=rabbitmq&logoColor=white)]()
 
 
-NeoVigil is a next-generation, AI-powered Security Operations Center that transcends passive detection. It constructs an **Active Defense Triad** — predicting attack paths before they materialize, deploying self-evolving deception to capture attacker tradecraft, and dynamically mutating the live attack surface to invalidate all adversary reconnaissance in real-time.
+NeoVigil is a next-generation, AI-powered Security Operations Center that transcends passive detection. It implements a **5-Phase Active Defense Lifecycle** — predicting attack paths before they materialize, deploying self-evolving deception to capture attacker tradecraft, dynamically mutating the live attack surface, autonomously containing threats with SOAR playbooks and firewall blocks, and continuously adapting its own AI brain through reinforcement learning feedback.
 
 🔗 [Live Architecture Demo](https://uuluul.github.io/AI-autonomous-SOC/)
 
@@ -22,10 +22,12 @@ NeoVigil is a next-generation, AI-powered Security Operations Center that transc
 ## 📋 Table of Contents
 
 - [Executive Summary](#-executive-summary)
-- [The Active Defense Triad](#-the-active-defense-triad)
+- [The 5-Phase Defense Lifecycle](#-the-5-phase-defense-lifecycle)
   - [Phase 1 — Predict](#-phase-1--predict-topology-aware-attack-path-prediction)
   - [Phase 2 — Deceive](#-phase-2--deceive-self-evolving-dynamic-honeypots)
   - [Phase 3 — Mutate](#-phase-3--mutate-moving-target-defense)
+  - [Phase 4 — Contain](#-phase-4--contain-automated-containment--isolation)
+  - [Phase 5 — Adapt](#-phase-5--adapt-brain-self-evolution)
 - [System Architecture](#-system-architecture)
 - [Core Platform Capabilities](#-core-platform-capabilities)
 - [Quick Start](#-quick-start)
@@ -55,20 +57,21 @@ Instead of waiting for the breach, NeoVigil builds an **Active Adversarial Archi
 | Intelligence is external, stale | **Self-evolving** — every capture makes the system smarter |
 
 The result is a **closed-loop defense system** where:
-1. **Phase 1** predicts the attacker's next move,
-2. **Phase 2** places a trap exactly where the attacker is going,
-3. **Phase 2** captures the attacker's tools and feeds them back into Phase 1,
-4. **Phase 3** mutates the real infrastructure so the attacker's reconnaissance becomes worthless.
+1. **Phase 1 (PREDICT)** predicts the attacker's next move,
+2. **Phase 2 (DECEIVE)** places a trap exactly where the attacker is going and poisons their AI tools,
+3. **Phase 3 (MUTATE)** mutates the real infrastructure so the attacker's reconnaissance becomes worthless,
+4. **Phase 4 (CONTAIN)** autonomously blocks attacker IPs, generates SOAR playbooks, and self-heals vulnerable infrastructure,
+5. **Phase 5 (ADAPT)** stores attacker TTPs into the knowledge base and tunes AI weights via RLHF — **every incident makes the system permanently smarter**.
 
 
 ---
 
-## 🔺 The Active Defense Triad
+## 🔺 The 5-Phase Defense Lifecycle
 
 <div align="center">
-  <img src="./images/AI-SOC.png" alt="NeoVigil Active Defense Triad Architecture" width="800">
+  <img src="./images/AI-SOC.png" alt="NeoVigil 5-Phase Defense Lifecycle Architecture" width="800">
   <br>
-  <em>NeoVigil's Active Adversarial Architecture: Predict → Deceive → Mutate</em>
+  <em>NeoVigil's Active Adversarial Architecture: Predict → Deceive → Mutate → Contain → Adapt</em>
 </div>
 
 ---
@@ -203,23 +206,113 @@ Trigger Sources:
 
 ---
 
+### 🚨 Phase 4 — CONTAIN: Automated Containment & Isolation
+
+
+Phase 4 takes decisive action. When Phase 3 completes its MTD mutation, the Containment Engine autonomously generates SOAR playbooks, executes hardware-level firewall blocks, and self-heals vulnerable infrastructure — all while maintaining a forensic-grade audit trail.
+
+#### How It Works
+
+```
+Phase 3 MTD Action Completed
+        ↓ contain_tasks queue
+
+   Containment Engine → Three parallel sub-engines:
+        ↓                    ↓                    ↓
+   Playbook Generator   Firewall Client      IaC Analyzer
+   (LLM + STIX 2.1)    (API / Mock mode)    (Nginx / Terraform)
+        ↓                    ↓                    ↓
+   contain-playbooks    contain-actions       iac-patches
+        ↓
+   Audit Logger → immutable timestamped evidence
+        ↓
+   Dispatch to adapt_tasks queue → Phase 5
+```
+
+#### Key Capabilities
+
+| Capability | Detail |
+|:---|:---|
+| **LLM Playbook Generation** | Commander AI writes SOAR playbooks with STIX 2.1 bundles; falls back to rule-based templates if LLM unavailable |
+| **Hardware-Level Firewall Blocks** | Dual-mode `FirewallClient` — mock mode for staging, live API mode for production. Blocks attacker IPs within seconds |
+| **IaC Self-Healing** | AI analyzes Nginx configs and network topology for vulnerabilities, auto-generates patches |
+| **Immutable Audit Trail** | Every containment action (block, patch, playbook) logged with timestamped signatures for forensic and compliance evidence |
+| **Cap-20 Safety Limit** | Maximum 20 simultaneous firewall blocks per incident to prevent accidental lockout |
+| **Cross-Phase Dispatch** | Automatically forwards full incident context (kill chain, IPs, playbook, patches) to Phase 5 for adaptation |
+
+---
+
+### 🧠 Phase 5 — ADAPT: Brain Self-Evolution
+
+
+Phase 5 closes the loop. Every incident — successful defense or partial failure — feeds back into the AI's knowledge base and tunes its prediction weights. The system doesn't just defend; it **evolves**.
+
+#### How It Works
+
+```
+Phase 4 Containment Complete
+        ↓ adapt_tasks queue
+
+   Adaptation Engine → Five sequential sub-engines:
+        ↓
+   1. STIX Quality Control → validate_stix.py (STIX 2.1 compliance)
+        ↓
+   2. Knowledge Base Population → store TTPs in cti-knowledge-base (KNN vectors)
+        ↓
+   3. RLHF Feedback Loop → compare predictions vs. actual → adjust thresholds
+        ↓
+   4. Incident Timeline → query all 5 phase indices → build correlated timeline
+        ↓
+   5. Executive Report → to_pdf.py → PDF with full Phase 1–4 lifecycle → Dashboard
+```
+
+#### Key Capabilities
+
+| Capability | Detail |
+|:---|:---|
+| **STIX 2.1 Quality Gate** | Validates all generated threat intelligence against the OASIS standard before storage |
+| **KNN Knowledge Base** | Stores attacker TTPs as searchable vectors in OpenSearch — future predictions draw on real incident data |
+| **RLHF Feedback Loop** | Compares Phase 1 predictions against actual attacker behavior; recommends threshold adjustments to reduce false positives |
+| **Incident Timeline** | Queries all 5 phase indices to build a correlated timeline — one document showing the full lifecycle of an attack |
+| **Executive PDF Reports** | Auto-generated PDF with incident summary, containment actions taken, KB entries added, and RL recommendations |
+| **Prediction Accuracy Tracking** | Computes and stores prediction accuracy metrics per incident for continuous improvement |
+
+#### The Self-Evolution Loop
+
+```
+Phase 1 predicts attack → Honeypot deployed → Infrastructure mutated
+     ↑                                                    ↓
+System gets smarter                           Threat contained & patched
+     ↑                                                    ↓
+RLHF tunes weights ← KB stores TTPs ← Incident timeline built ← PDF generated
+```
+
+**Every attacker that touches NeoVigil makes the next defense cycle faster, more accurate, and harder to evade.**
+
+---
+
 ## 🏗️ System Architecture
 
-NeoVigil is composed of **17 microservices** orchestrated via Docker Compose:
+NeoVigil is composed of **22 microservices** orchestrated via Docker Compose:
 
 ```mermaid
 graph TB
-    subgraph "Ingestion Layer"
+    subgraph "Layer 1: Ingestion"
         LOG[Log Sources] -->|Tail/Syslog| FB(Fluent Bit)
         RSS[RSS/OSINT Feeds] -->|Crawl| IC(Intelligence Crawler)
         MAN[Manual Upload] -->|Monitor| MASTER(Pipeline Master)
     end
 
-    subgraph "Message Bus"
-        FB & IC & MASTER -->|JSON| RMQ{RabbitMQ}
+    subgraph "Layer 2: Message Bus & AI Edge Filtering"
+        FB & IC & MASTER -->|JSON| RMQ{RabbitMQ<br>16 Queues}
+        RMQ -->|log.network| AWN[Network AI Worker]
+        RMQ -->|log.endpoint| AWE[Endpoint AI Worker]
+        RMQ -->|log.identity| AWI[Identity AI Worker]
+        AWN & AWE & AWI -->|anomaly| ACQ[alert_critical<br>Priority Queue]
+        ACQ --> RMQ
     end
 
-    subgraph "AI Processing Core"
+    subgraph "Layer 3: Commander AI & 5-Phase Defense"
         RMQ --> WORKER[Pipeline Worker]
         WORKER <-->|RAG| OSEARCH[(OpenSearch<br>Vector KNN)]
         WORKER <-->|Analysis| LLM[GPT-4 / Local LLM]
@@ -236,6 +329,7 @@ graph TB
     subgraph "Phase 2: DECEIVE"
         DDQ --> DM[Decoy Manager]
         DM -->|Docker API| HONEY[Honeypot Container]
+        DM -->|Data Poisoning| POISON[fake_secrets + poisoned_db]
         HONEY -->|Telemetry| FBSIDE[Fluent Bit Sidecar]
         FBSIDE --> SOAR[SOAR Server]
         SOAR --> HPQ[honeypot_events]
@@ -249,17 +343,34 @@ graph TB
         MTDC -->|Score ≥ 60| OBFENG[Obfuscation Engine]
         OBFENG --> PROXY[MTD Proxy<br>OpenResty + Lua]
         MTDC -->|Score ≥ 85| MIGENG[Migration Engine]
+        MTDC -->|Validate| TWIN[Cyber Digital Twin]
         MIGENG -->|Docker API| BLUEGREEN[Blue/Green Swap]
-        MTDC -->|Approval Queue| ANALYST[Analyst Dashboard]
-        MTDC -->|Audit| AUDITLOG[(mtd-audit-log)]
+        MTDC -->|Dispatch| CTQ[contain_tasks]
     end
 
-    subgraph "Visualization"
-        OSEARCH --> UI[Streamlit Dashboard]
+    subgraph "Phase 4: CONTAIN"
+        CTQ --> CE[Containment Engine]
+        CE -->|LLM| PLAYBOOK[SOAR Playbook]
+        CE -->|API| FW[Firewall Blocks]
+        CE -->|Analyze| IAC[IaC Self-Healing]
+        CE -->|Dispatch| ATQ[adapt_tasks]
+    end
+
+    subgraph "Phase 5: ADAPT"
+        ATQ --> ADAPT[Adaptation Engine]
+        ADAPT -->|Validate| STIX[STIX 2.1 QC]
+        ADAPT -->|Store| KB[Knowledge Base]
+        ADAPT -->|Tune| RLHF[RLHF Feedback]
+        ADAPT -->|Generate| PDF[Executive PDF]
+    end
+
+    subgraph "Layer 4: Visualization"
+        OSEARCH --> UI[Streamlit Dashboard<br>10 Pages]
         UI --> SOC[SOC Monitor]
-        UI --> TMAP[Threat Map]
         UI --> PTMAP[Predictive Map]
         UI --> MTDDASH[MTD Dashboard]
+        UI --> CONTAIN_UI[Containment Ops]
+        UI --> ADAPT_UI[Adaptation & Learning]
     end
 ```
 
@@ -284,23 +395,33 @@ graph TB
 | 15 | `validation-engine` | Prediction validation & RAG feedback | Phase 2 |
 | 16 | `mtd-controller` | MTD scoring, RBAC, action dispatch | Phase 3 |
 | 17 | `mtd-proxy` | OpenResty with Lua obfuscation | Phase 3 |
+| 18 | `ai-worker-network` | Network log edge filtering (port scans, C2) | Layer 2 |
+| 19 | `ai-worker-endpoint` | Endpoint log edge filtering (LOLBins, mimikatz) | Layer 2 |
+| 20 | `ai-worker-identity` | Identity log edge filtering (brute force, kerberoasting) | Layer 2 |
+| 21 | `contain-engine` | Automated containment, SOAR playbooks, firewall blocks | Phase 4 |
+| 22 | `adapt-engine` | Brain self-evolution, KB population, RLHF, PDF reports | Phase 5 |
 
 ---
 
 ## 🛠️ Core Platform Capabilities
 
-Beyond the Active Defense Triad, NeoVigil provides a full enterprise SOC platform:
+Beyond the 5-Phase Defense Lifecycle, NeoVigil provides a full enterprise SOC platform:
 
+- **AI Worker Edge Filtering** — Three domain-specific workers (Network, Endpoint, Identity) perform sub-second KNN-based noise filtering, only escalating true anomalies to Commander AI
+- **Data Poisoning** — Generates syntactically valid fake secrets, poisoned databases with canary tokens, and contradictory data designed to induce hallucinations in attacker AIs (WormGPT)
+- **Cyber Digital Twin** — Pre-validates every MTD mutation in a simulated parallel environment, guaranteeing zero business disruption before execution
+- **Automated Containment** — LLM-generated SOAR playbooks, hardware-level firewall API blocking, and IaC self-healing patches — all with forensic-grade audit trails
+- **Self-Evolving Knowledge Base** — Every incident feeds attacker TTPs into the KNN vector store; RLHF feedback tunes prediction thresholds, making the system permanently smarter
 - **Dual-Layer RAG** — Queries both the MITRE/AIDEFEND expert knowledge base and internal historical CTI reports for grounded AI analysis
-- **STIX 2.1 Compliance** — Generates and validates industry-standard threat intelligence bundles
-- **Executive PDF Reports** — Automated report generation with IOCs, TTPs, and AI-suggested mitigations
+- **STIX 2.1 Compliance** — Generates and validates industry-standard threat intelligence bundles with automated quality gates
+- **Executive PDF Reports** — Automated report generation with full Phase 1–4 incident timeline, IOCs, TTPs, and AI-suggested mitigations
 - **PII Masking** — Automatic redaction of IPs/emails before LLM processing
 - **GeoIP Enrichment** — Real-time attacker geolocation for threat mapping
 - **CMDB Integration** — Asset criticality scoring for dynamic alert prioritization
 - **5-Level RBAC** — Viewer → Tier 1 → Tier 2 → Admin → System Owner (ISO 27001 / SOC 2 ready)
 - **SOAR Guardrails** — Critical asset protection, human-in-the-loop for internal threats
-- **Immutable Audit Trail** — All analyst actions logged to tamper-proof indices
-- **Dead-Letter Queue** — Zero data loss; failed tasks preserved for forensic review
+- **Immutable Audit Trail** — All analyst actions logged to tamper-proof indices across all 5 phases
+- **Dead-Letter Queue** — Zero data loss; failed tasks preserved for forensic review with DLQ monitoring
 - **Multi-Tenancy** — Full data isolation via `tenant_id` partitioning across all indices
 - **Privacy Shield** — Local LLM enforcement mode blocks cloud API fallback
 
@@ -350,7 +471,7 @@ AZURE_OPENAI_API_VERSION=2024-02-15-preview
 docker compose up -d --build
 ```
 
-This starts all 17 services. On machines with < 16 GB RAM:
+This starts all 22 services. On machines with < 16 GB RAM:
 
 ```bash
 docker compose up -d --build --scale cti-pipeline-worker=1
@@ -391,7 +512,9 @@ Open **[http://localhost:8501](http://localhost:8501)** and log in with `admin /
 | 🔍 **CTI Report Review** | AI analysis approval/rejection workflow |
 | 📜 **Audit & Compliance** | Immutable action log (ISO 27001 / SOC 2) |
 | 🎯 **Predictive Threat Map** | Phase 1 attack path predictions |
-| 🛡️ **Moving Target Defense** | Phase 3 obfuscation rules, approvals, migrations, audit |
+| 🛡️ **Moving Target Defense** | Phase 3 obfuscation rules, approvals, migrations, digital twin validation |
+| 🚨 **Containment Operations** | Phase 4 firewall blocks, SOAR playbooks, IaC self-healing patches |
+| 🧠 **Adaptation & Learning** | Phase 5 knowledge base growth, RLHF metrics, incident timelines, PDF reports |
 
 ### Operational Workflows
 
@@ -414,11 +537,13 @@ NeoVigil ships with `simulate_apt_killchain.py` — a cinematic, color-coded ter
 python simulate_apt_killchain.py
 ```
 
-The script simulates a full APT kill chain:
+The script simulates a full APT kill chain across all 5 phases:
 
 1. **Phase 1 (Predict)** — Injects a Log4Shell initial access event → forces REDSPEC to predict the kill chain
 2. **Phase 2 (Deceive)** — Simulates the attacker hitting the predicted honeypot → triggers validation & RAG feedback
 3. **Phase 3 (Mutate)** — Floods scanner probes → pushes MTD score ≥ 85 → triggers obfuscation + migration proposal
+4. **Phase 4 (Contain)** — Generates SOAR playbook → blocks attacker IPs via firewall API → dispatches to adaptation
+5. **Phase 5 (Adapt)** — Validates STIX quality → populates knowledge base → builds incident timeline → generates executive PDF
 
 ---
 
@@ -444,14 +569,17 @@ The script simulates a full APT kill chain:
 | **Language** | Python 3.10+ |
 | **AI/LLM** | GPT-4o, LangChain (RAG), REDSPEC (adversarial persona) |
 | **Search & Vector DB** | OpenSearch (KNN, Vector Search, Lucene) |
-| **Message Bus** | RabbitMQ (9 queues, durable, DLQ) |
+| **Message Bus** | RabbitMQ (16 queues, priority queue, durable, DLQ) |
 | **Log Ingestion** | Fluent Bit (streaming), RSS/OTX crawlers (batch) |
-| **Deception** | Docker SDK (container orchestration), Fluent Bit sidecars |
-| **MTD Proxy** | OpenResty (Nginx + Lua) |
-| **Container Orchestration** | Docker & Docker Compose (17 services) |
-| **Frontend** | Streamlit, PyDeck (3D maps), Plotly, Mermaid.js |
+| **Edge AI** | AI Worker (KNN anomaly scoring, pattern matching, per-domain classification) |
+| **Deception** | Docker SDK (container orchestration), Fluent Bit sidecars, Data Poisoning Engine |
+| **MTD Proxy** | OpenResty (Nginx + Lua), Cyber Digital Twin validation |
+| **Containment** | SOAR playbook generator, Firewall API client, IaC patch generator |
+| **Adaptation** | RLHF feedback loop, KNN knowledge base writer, incident timeline builder |
+| **Container Orchestration** | Docker & Docker Compose (22 services) |
+| **Frontend** | Streamlit (10 pages), PyDeck (3D maps), Plotly, Mermaid.js |
 | **Data Standards** | STIX 2.1, MITRE ATT&CK, AIDEFEND |
-| **Testing** | Pytest, Integration Suite, Load Testing, Chaos Engineering |
+| **Testing** | Pytest (128 unit tests), Integration Suite, E2E 5-Phase Flow, CI/CD |
 
 ---
 
@@ -460,6 +588,9 @@ The script simulates a full APT kill chain:
 ```bash
 # Run the full Production Validation Suite (Recommended)
 ./test_all.sh
+
+# Run unit tests for Phase 4/5 modules (128 tests, no Docker required)
+python3 -m pytest tests/unit/test_phase4_phase5.py -v
 
 # Run specific test layers
 python3 tests/integration/test_components.py  # Integration (RabbitMQ -> Worker -> OpenSearch)
@@ -505,8 +636,8 @@ Transitioning from a single-node deployment to a fully distributed cluster:
 * **OpenSearch Cluster:** Deploying dedicated Master, Ingest, and Data nodes across multiple availability zones.
 * **RabbitMQ Mirrored Queues:** Upgrading the `cti_exchange` and queues to a clustered setup to ensure zero message loss during node failures.
 
-### 3. Advanced AI Orchestration (SOAR Integration)
-Re-activating the fully integrated SOAR container to allow the AI to not only generate CTI playbooks but also autonomously execute containment actions (e.g., isolating compromised IPs via firewall APIs).
+### 3. Distributed AI Worker Scaling (KEDA)
+Event-driven auto-scaling for the AI Worker edge filtering layer using **KEDA** (Kubernetes Event-Driven Autoscaler). Each domain worker (Network, Endpoint, Identity) scales independently based on its RabbitMQ queue depth, ensuring zero latency during DDoS floods while scaling down during idle periods to minimize cloud costs.
 
 ### 4. Container Orchestration & Auto-Scaling (Kubernetes)
 Migrating from Docker Compose to a fully managed **Kubernetes (K8s)** cluster (e.g., AWS EKS, GCP GKE) for production-grade orchestration and resilience:
