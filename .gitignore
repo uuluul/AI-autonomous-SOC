@@ -51,3 +51,9 @@ data/*.json
 !data/network_topology.json
 !data/obfuscation_profiles.json
 !data/assets.json
+data/opensearch/
+config/ssl/
+.claude/
+diagnose.sh
+diagnose_output.txt
+docker-compose.yml.bak*

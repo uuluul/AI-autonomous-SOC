@@ -4,12 +4,12 @@ import random
 import numpy as np
 from dotenv import load_dotenv
 from opensearchpy import OpenSearch
-from .llm_client import LLMClient
+from src.llm_client import LLMClient
 
 load_dotenv()
 llm = LLMClient()
 client = OpenSearch(
-    hosts=[{'host': 'localhost', 'port': 9200}],
+    hosts=[{'host': os.getenv('OPENSEARCH_HOST', 'opensearch-node'), 'port': int(os.getenv('OPENSEARCH_PORT', 9200))}],
     http_compress=True,
     use_ssl=False
 )
@@ -200,6 +200,36 @@ def detect(log_text, threshold, k=K, filters=None, score_method="kth", print_top
 
     if anomaly_score > threshold:
         print(f"🔴 [ANOMALY DETECTED] Score {anomaly_score:.4f} > {threshold:.4f}")
+        # 寫入 enriched-alerts index
+        try:
+            from datetime import datetime, timezone
+            sev = "CRITICAL" if anomaly_score > threshold * 1.5 else "HIGH"
+            alert_doc = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "log_message": log_text,
+                "rule_name": "KNN_Anomaly_Detection",
+                "anomaly_score": round(anomaly_score, 4),
+                "threshold": round(threshold, 4),
+                "severity": sev,
+                "status": "New",
+                "source": "detection_engine",
+                "tenant_id": os.getenv("TENANT_ID", "default"),
+                "asset_hostname": "unknown-host",
+                "asset_department": "SOC",
+                "asset_criticality": sev,
+                "asset_owner": "security-team",
+                "top_neighbors": [
+                    {"similarity": round(h["_score"], 4), "log": h["_source"].get("log_text", h["_source"].get("log_message", ""))[:100]}
+                    for h in hits[:3]
+                ]
+            }
+            alert_client = OpenSearch(
+                hosts=[{"host": os.getenv("OPENSEARCH_HOST", "opensearch-node"), "port": int(os.getenv("OPENSEARCH_PORT", 9200))}]
+            )
+            alert_client.index(index="security-alerts", body=alert_doc)
+            print(f"   ✅ Alert written to enriched-alerts index")
+        except Exception as e:
+            print(f"   ⚠️  Failed to write alert: {e}")
     else:
         print(f"🟢 [BENIGN] Score {anomaly_score:.4f} <= {threshold:.4f}")
 

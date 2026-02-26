@@ -141,7 +141,7 @@ services:
       - OPENSEARCH_PORT=9200
       - RABBITMQ_HOST=rabbitmq
       - ROLE=master
-      - LLM_PROVIDER=local
+      - LLM_PROVIDER=${LLM_PROVIDER}
       - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       opensearch-node:
@@ -165,7 +165,7 @@ services:
       - OPENSEARCH_HOST=opensearch-node
       - RABBITMQ_HOST=rabbitmq
       - ROLE=worker
-      - LLM_PROVIDER=local
+      - LLM_PROVIDER=${LLM_PROVIDER}
       - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       opensearch-node:
@@ -225,6 +225,9 @@ services:
     environment:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
     networks:
       - opensearch-net
     depends_on:
@@ -244,7 +247,7 @@ services:
       - OPENSEARCH_HOST=opensearch-node
       - OPENSEARCH_PORT=9200
       - RABBITMQ_HOST=rabbitmq
-      - LLM_PROVIDER=local
+      - LLM_PROVIDER=${LLM_PROVIDER}
       - LOCAL_LLM_URL=http://mock-llm:8000/v1
     depends_on:
       rabbitmq:
@@ -357,6 +360,7 @@ services:
       - "8443:443"
     volumes:
       - ./config/mtd_nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/ssl:/etc/nginx/ssl:ro
       - ./data/obfuscation_profiles.json:/etc/nginx/obfuscation_profiles.json:ro
     networks:
       - opensearch-net

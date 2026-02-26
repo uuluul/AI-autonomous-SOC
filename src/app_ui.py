@@ -89,7 +89,7 @@ def check_password():
             st.session_state["password_correct"] = True
             st.session_state["logged_in_user"] = st.session_state["username"]
             # Assign Role based on Sidebar Selection (Mock Auth)
-            role = st.session_state.get("selected_role_login", "Viewer")
+            role = st.session_state.get("selected_role_login_retry") or st.session_state.get("selected_role_login", "Viewer")
             st.session_state["user_role"] = role
             st.session_state["session_id"] = str(uuid.uuid4())
             
@@ -1184,7 +1184,7 @@ elif page == "📈 Enriched Alerts Dashboard":
         with st.expander("🔍 Evidence Log Excerpt"):
             for idx, row in df_alerts.head(5).iterrows():
                 st.markdown(f"**Alert:** {row['rule_name']} | **Target:** {row['asset_hostname']}")
-                st.code(row['log_excerpt'], language='text')
+                st.code(row.get('log_excerpt', row.get('log_message', 'N/A')), language='text')
                 st.divider()
 
 
